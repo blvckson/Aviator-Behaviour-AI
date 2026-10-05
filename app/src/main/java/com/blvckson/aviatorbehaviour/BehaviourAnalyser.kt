@@ -43,7 +43,7 @@ class BehaviourAnalyser {
         val markerAgreement=100.0*records.count{it.endingMarkers.isNotBlank()}.toDouble()/records.size
         val simRise=preSimilarity-baseSimilarity; val visualRise=preVisual-baseVisual
         val planeRise=prePlane-basePlane; val ultraRise=preUltra-baseUltra
-        val endingScore=weightedDifference(simRise,baseSimilarity,visualRise,baseVisual,planeRise,basePlane,ultraRise,baseUltra)
+        val endingScore=stageDifference(seq)
         val strongest=records.maxByOrNull{it.preFlyAwayMaxSimilarity*.30+it.preFlyAwayMaxVisualChange*.20+normalise(it.preFlyAwayMaxPlaneMotion)*.15+it.preFlyAwayMaxUltraWatch*.20+markerScore(it.endingMarkers)*.15}?.round?:0
         return BehaviourAnalysis(records.size,baseSimilarity,preSimilarity,preVisual,prePlane,preUltra,simRise,visualRise,planeRise,ultraRise,endingScore,strongest,agree,markerAgreement,first,last,overallPreFlySimilarity(seq))
     }
@@ -105,10 +105,24 @@ class BehaviourAnalyser {
         val m=x.average()
         return x.map{(it-m)*(it-m)}.average()
     }
-    private fun weightedDifference(sim:Double,sb:Double,visual:Double,vb:Double,plane:Double,pb:Double,ultra:Double,ub:Double):Double {
-        fun rel(d:Double,b:Double)=if(b<=.0001)min(1.0,abs(d))else min(1.0,abs(d)/max(b,1.0))
-        return(rel(sim,sb)*.28+rel(visual,vb)*.22+rel(plane,pb)*.18+rel(ultra,ub)*.22)*100.0
+    private fun stageDifference(all:List<List<S>>):Double{
+        if(all.isEmpty()) return 0.0
+        val scores=all.mapNotNull{samples->
+            if(samples.size<6) return@mapNotNull null
+            val base=avgVector(samples.take(max(3,samples.size*55/100)))
+            val late=samples.takeLast(max(3,samples.size*35/100))
+            if(late.isEmpty()) return@mapNotNull null
+            val movement=late.map{distance(it,base)}.average()
+            val visual=late.map{min(1.0,abs(it.visual-base.visual)/100.0)}.average()
+            val multiplierVisual=late.map{min(1.0,abs(it.ultra-base.ultra)/100.0)}.average()
+            val stability=late.map{abs(it.stable-base.stable)}.average()
+            // Compare late-stage behaviour with the same round's earlier stage.
+            // Red multiplier state and raw speed are intentionally absent.
+            (movement*.40 + visual*.25 + multiplierVisual*.25 + stability*.10).coerceIn(0.0,1.0)
+        }
+        return if(scores.isEmpty()) 0.0 else scores.average()*100.0
     }
+
     private fun normalise(v:Double)=min(100.0,v)/100.0
     private fun markerScore(s:String)=if(s.isBlank())0.0 else min(1.0,s.split('|').size/4.0)
 }
