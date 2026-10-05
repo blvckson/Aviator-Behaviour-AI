@@ -35,6 +35,7 @@ class MainActivity: Activity() {
                     R.id.menu_all_behaviour->{showStoredBehaviours(false);true}
                     R.id.menu_pre_fly->{showStoredBehaviours(true);true}
                     R.id.menu_analyser->{showEndAnalyser();true}
+                    R.id.menu_statement->{showStatement();true}
                     R.id.menu_clear->{confirmClear();true}
                     else->false
                 }
@@ -87,6 +88,57 @@ class MainActivity: Activity() {
             .append("Strongest change phase: ").append(pct(a.endingChangePhase*100.0)).append("\n\n")
             .append("The analyser compares late behaviour against each round’s earlier baseline, then checks repeated transitions across stored rounds. Observed behaviour only; no guaranteed outcome.")
         AlertDialog.Builder(this).setTitle("END-OF-ROUND ANALYSER").setMessage(msg.toString()).setPositiveButton("CLOSE",null).show()
+    }
+
+    private fun showStatement(){
+        val records=database.latest(200)
+        if(records.isEmpty()){
+            AlertDialog.Builder(this).setTitle("STATEMENT")
+                .setMessage("No completed rounds are available yet. Start UltraScan and allow several rounds to be recorded.")
+                .setPositiveButton("CLOSE",null).show()
+            return
+        }
+        val a=BehaviourAnalyser().analyse(records)
+        val overall=a.overallPreFlySimilarity
+        val difference=a.endingDifferenceScore
+        val activityScore=((a.averagePreFlyVisualChange.coerceIn(0.0,100.0)*.25)+
+                (a.averagePreFlyUltraWatch.coerceIn(0.0,100.0)*.25)+
+                (a.averagePreFlySimilarity.coerceIn(0.0,100.0)*.30)+
+                (minOf(100.0,a.averagePreFlyPlaneMotion)*.20))
+        val overallText=when{
+            overall>=80 -> "The stored rounds show a strong and repeated overall pre-fly-away behavioural pattern."
+            overall>=60 -> "The stored rounds show a moderate and recurring overall pre-fly-away behavioural pattern."
+            else -> "The stored rounds show a weak or inconsistent overall pre-fly-away behavioural pattern."
+        }
+        val differenceText=when{
+            difference>=60 -> "The pre-fly-away activity is clearly different from the earlier stages of the rounds."
+            difference>=30 -> "The pre-fly-away activity shows a noticeable difference from the earlier stages."
+            else -> "The pre-fly-away activity is not strongly separated from the earlier stages."
+        }
+        val activityText=when{
+            activityScore>=75 -> "Appearance, movement, visual transition, UltraWatch and stability are collectively showing strong activity."
+            activityScore>=50 -> "The combined activity signals are moderately strong, with some variation between rounds."
+            else -> "The combined activity signals are relatively weak or variable and need more observations."
+        }
+        val msg=StringBuilder()
+            .append("OVERALL\n")
+            .append(overallText).append("\n")
+            .append("Overall pre-fly-away similarity: ").append(pct(overall)).append("\n\n")
+            .append("DIFFERENCE\n")
+            .append(differenceText).append("\n")
+            .append("Overall ending difference: ").append(pct(difference)).append("\n\n")
+            .append("ALL ACTIVITIES\n")
+            .append(activityText).append("\n")
+            .append("Pre-fly similarity: ").append(pct(a.averagePreFlySimilarity)).append("\n")
+            .append("Visual transition: ").append(pct(a.averagePreFlyVisualChange)).append("\n")
+            .append("Plane movement/trajectory: ").append(number(a.averagePreFlyPlaneMotion)).append("\n")
+            .append("UltraWatch: ").append(pct(a.averagePreFlyUltraWatch)).append("\n")
+            .append("Historical sequence agreement: ").append(pct(a.sequenceAgreement)).append("\n\n")
+            .append("INTERPRETATION\n")
+            .append("The statement is generated from the recorded visual behaviour across ").append(a.rounds)
+            .append(" completed rounds. Speed and the red multiplier reading are excluded from the overall similarity; movement/trajectory remains included. ")
+            .append("This describes observed behavioural similarity and difference only; it does not guarantee what the next round will do.")
+        AlertDialog.Builder(this).setTitle("STATEMENT").setMessage(msg.toString()).setPositiveButton("CLOSE",null).show()
     }
 
     private fun signed(value:Double):String=(if(value>=0)"+" else "")+"%.1f".format(Locale.US,value)+" pts"
