@@ -18,9 +18,12 @@ class UltraScanEngine {
     private var movementConsistency = 0.0
     private var similarity = 0.0
     private var similarityHold = 0
+    private var scanFrame = 0
+    private var lastPlaneScanFrame = -1
 
     fun inspect(frame: Bitmap, now: Long): List<VisualEvent> {
-        val out = ArrayList<VisualEvent>()
+        val out = ArrayList<VisualEvent>(8)
+        scanFrame++
         val p = previous
         if (p != null && p.width == frame.width && p.height == frame.height) {
             val change = sampleChange(p, frame)
@@ -41,7 +44,7 @@ class UltraScanEngine {
             if (stable && redDensity > 0.018)
                 out.add(VisualEvent(now, "MULTIPLIER_VISUAL_STABLE", 1.0, "central multiplier-area visually stable while red"))
 
-            val plane = trackPlane(frame, now)
+            val plane = trackPlane(frame, now, scanFrame)
             val speed: Double = if (plane.found) sqrt((plane.vx * plane.vx + plane.vy * plane.vy).toDouble()) else 0.0
             val accel = abs(plane.acceleration.toDouble())
             if (plane.found && (speed > 5.0 || accel > 18.0))
@@ -159,14 +162,20 @@ class UltraScanEngine {
         return red.toDouble() / n
     }
 
-    private fun trackPlane(b: Bitmap, t: Long): PlaneState {
-        var sx = 0.0; var sy = 0.0; var n = 0; val step = 6
-        for (y in 0 until b.height step step) for (x in 0 until b.width step step) {
+    private fun trackPlane(b: Bitmap, t: Long, frameNo: Int): PlaneState {
+        var sx = 0.0; var sy = 0.0; var n = 0
+        val step = if (!lastX.isNaN() && frameNo - lastPlaneScanFrame <= 2) 10 else 8
+        val local = !lastX.isNaN() && frameNo - lastPlaneScanFrame <= 2
+        val xStart = if (local) max(0, lastX.toInt() - b.width / 5) else 0
+        val xEnd = if (local) min(b.width, lastX.toInt() + b.width / 5) else b.width
+        val yStart = if (local) max(0, lastY.toInt() - b.height / 5) else 0
+        val yEnd = if (local) min(b.height, lastY.toInt() + b.height / 5) else b.height
+        for (y in yStart until yEnd step step) for (x in xStart until xEnd step step) {
             val c = b.getPixel(x, y)
             val r = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
             if (r > 170 && r > g * 1.25 && r > bl * 1.25) { sx += x; sy += y; n++ }
         }
-        val found = n > 4
+        val found = n > 3
         val x = if (found) (sx / n).toFloat() else Float.NaN
         val y = if (found) (sy / n).toFloat() else Float.NaN
         var vx = 0f; var vy = 0f; var acc = 0f
@@ -190,7 +199,7 @@ class UltraScanEngine {
                 lastDy = ndy
             }
         }
-        if (found) { lastX = x; lastY = y; lastT = t }
+        if (found) { lastX = x; lastY = y; lastT = t; lastPlaneScanFrame = frameNo }
         return PlaneState(found, x, y, vx, vy, acc)
     }
 }
