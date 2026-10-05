@@ -98,7 +98,7 @@ class BehaviourAnalyser {
     }
     private fun distance(a:S,b:S):Double {
         fun d(x:Double,y:Double,scale:Double)=min(1.0,abs(x-y)/max(scale,0.0001))
-        return d(a.sim,b.sim,100.0)*.22+d(a.visual,b.visual,100.0)*.18+d(a.plane,b.plane,80.0)*.18+d(a.ultra,b.ultra,100.0)*.18+d(a.red,b.red,10.0)*.12+d(a.stable,b.stable,1.0)*.12
+        return d(a.sim,b.sim,100.0)*.24+d(a.visual,b.visual,100.0)*.20+d(a.plane,b.plane,80.0)*.22+d(a.ultra,b.ultra,100.0)*.18+d(a.stable,b.stable,1.0)*.16
     }
     private fun variance(x:List<Double>):Double {
         if(x.size<2)return 0.0
