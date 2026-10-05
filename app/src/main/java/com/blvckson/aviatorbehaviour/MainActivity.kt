@@ -116,14 +116,31 @@ class MainActivity: Activity() {
             else -> "The pre-fly-away activity is not strongly separated from the earlier stages."
         }
         val activityText=when{
-            activityScore>=75 -> "Appearance, movement, visual transition, UltraWatch and stability are collectively showing strong activity."
-            activityScore>=50 -> "The combined activity signals are moderately strong, with some variation between rounds."
-            else -> "The combined activity signals are relatively weak or variable and need more observations."
+            activityScore>=75 -> "The recorded rounds show a strong and recognizable overall pre-fly-away transition pattern."
+            activityScore>=50 -> "The recorded rounds show a moderate overall pre-fly-away transition pattern with some variation."
+            else -> "The recorded rounds show a weak or inconsistent overall pre-fly-away transition pattern."
+        }
+        val overallBehaviour=when{
+            overall>=80 && difference>=60 -> "Overall, the pre-fly-away behaviour appears highly recognizable: the late-stage visual and movement pattern repeatedly separates from the earlier round behaviour."
+            overall>=60 && difference>=30 -> "Overall, the pre-fly-away behaviour appears moderately recognizable: a recurring late-stage transition is visible, although its strength varies between rounds."
+            else -> "Overall, the pre-fly-away behaviour is not yet consistently distinguishable from the earlier round behaviour in the stored observations."
+        }
+        val phaseText=when{
+            a.endingChangePhase>=0.75 -> "The strongest behavioural change is concentrated late in the round."
+            a.endingChangePhase>=0.50 -> "The strongest behavioural change develops through the latter part of the round."
+            else -> "The strongest behavioural change is appearing relatively early and should be interpreted cautiously."
         }
         val msg=StringBuilder()
-            .append("OVERALL\n")
-            .append(overallText).append("\n")
-            .append("Overall pre-fly-away similarity: ").append(pct(overall)).append("\n\n")
+            .append("OVERALL PRE-FLY-AWAY BEHAVIOUR\n")
+            .append(overallBehaviour).append("\n")
+            .append(phaseText).append("\n")
+            .append("The AI is describing the overall visual behaviour as a pattern across rounds, rather than using the displayed multiplier value itself. ")
+            .append("It considers the changing appearance/graphics, plane movement and trajectory, visual transition, UltraWatch/stability and repeated sequence behaviour. ")
+            .append("Speed and the red multiplier reading remain excluded from the overall similarity.\n\n")
+            .append("Overall pre-fly-away similarity: ").append(pct(overall)).append("\n")
+            .append("Overall ending difference from earlier stages: ").append(pct(difference)).append("\n\n")
+            .append("OVERALL ACTIVITY STRENGTH\n")
+            .append(activityText).append("\n")
             .append("DIFFERENCE\n")
             .append(differenceText).append("\n")
             .append("Overall ending difference: ").append(pct(difference)).append("\n\n")
