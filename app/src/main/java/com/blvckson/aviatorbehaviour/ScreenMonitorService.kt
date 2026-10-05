@@ -52,7 +52,9 @@ class ScreenMonitorService : Service() {
         val similarity: Double,
         val visualChange: Double,
         val planeMotion: Double,
-        val ultraWatch: Double
+        val ultraWatch: Double,
+        val red: Double,
+        val stable: Double
     )
 
     override fun onCreate() {
@@ -113,8 +115,9 @@ class ScreenMonitorService : Service() {
     }
 
     private fun recordEvents(events: List<VisualEvent>, now: Long) {
-        val similarityEvents = events.filter { it.type == "BEHAVIOUR_SIMILARITY" || it.type == "PRE_FLY_AWAY_MATCH" }
-        for (event in similarityEvents) { maxSimilarity=max(maxSimilarity,event.score); similaritySum+=event.score; similaritySamples++ }
+        for (event in events.filter { it.type == "BEHAVIOUR_SIMILARITY" || it.type == "PRE_FLY_AWAY_MATCH" }) {
+            maxSimilarity=max(maxSimilarity,event.score); similaritySum+=event.score; similaritySamples++
+        }
         var sim=0.0; var visual=0.0; var plane=0.0; var ultra=0.0; var red=0.0; var stable=0.0
         for(event in events) when(event.type){
             "FRAME_CHANGE" -> { maxVisualChange=max(maxVisualChange,event.score*100.0); visual=max(visual,event.score*100.0) }
@@ -135,25 +138,114 @@ class ScreenMonitorService : Service() {
         val sample=BehaviourSample(now,sim,visual,plane,ultra,red,stable)
         recentSamples.addLast(sample)
         while(recentSamples.isNotEmpty() && now-recentSamples.peekFirst().time>preFlyAwayWindowMs) recentSamples.removeFirst()
-        if(roundActive && (lastStoredSampleAt==0L || now-lastStoredSampleAt>=sampleIntervalMs)){ sequenceSamples.add(sample); lastStoredSampleAt=now }
-        val disappeared=events.any{it.type=="PLANE_DISAPPEAR"}
-        if(disappeared && roundActive){
-            for(s in recentSamples){preMaxSimilarity=max(preMaxSimilarity,s.similarity);preMaxVisualChange=max(preMaxVisualChange,s.visualChange);preMaxPlaneMotion=max(preMaxPlaneMotion,s.planeMotion);preMaxUltraWatch=max(preMaxUltraWatch,s.ultraWatch)}
-            saveRound(now); roundActive=false; recentSamples.clear(); sequenceSamples.clear(); endingMarkers.clear(); lastStoredSampleAt=0L
+        if(roundActive && (lastStoredSampleAt==0L || now-lastStoredSampleAt>=sampleIntervalMs)){sequenceSamples.add(sample);lastStoredSampleAt=now}
+        if(events.any{it.type=="PLANE_DISAPPEAR"} && roundActive){
+            for(x in recentSamples){preMaxSimilarity=max(preMaxSimilarity,x.similarity);preMaxVisualChange=max(preMaxVisualChange,x.visualChange);preMaxPlaneMotion=max(preMaxPlaneMotion,x.planeMotion);preMaxUltraWatch=max(preMaxUltraWatch,x.ultraWatch)}
+            saveRound(now);roundActive=false;recentSamples.clear();sequenceSamples.clear();endingMarkers.clear();lastStoredSampleAt=0L
         }
-        if(events.any{it.type=="PLANE_MOTION"} || engine.lastPlaneSeenAt()==now){
-            if(!roundActive){
-                roundActive=true; roundNumber=database.nextRoundNumber()
-                similaritySum=0.0; similaritySamples=0; maxSimilarity=0.0; maxVisualChange=0.0; maxPlaneMotion=0.0; maxUltraWatch=0.0
-                preMaxSimilarity=0.0;preMaxVisualChange=0.0;preMaxPlaneMotion=0.0;preMaxUltraWatch=0.0
-                sequenceSamples.clear();endingMarkers.clear();lastStoredSampleAt=0L
-            }
+        if(events.any{it.type=="PLANE_MOTION"} || engine.lastPlaneSeenAt()==now) if(!roundActive){
+            roundActive=true;roundNumber=database.nextRoundNumber()
+            similaritySum=0.0;similaritySamples=0;maxSimilarity=0.0;maxVisualChange=0.0;maxPlaneMotion=0.0;maxUltraWatch=0.0
+            preMaxSimilarity=0.0;preMaxVisualChange=0.0;preMaxPlaneMotion=0.0;preMaxUltraWatch=0.0
+            sequenceSamples.clear();endingMarkers.clear();lastStoredSampleAt=0L
         }
     }
 
     private fun saveRound(now:Long){
         val avg=if(similaritySamples>0) similaritySum/similaritySamples else 0.0
-        val seq=sequenceSamples.joinToString(";"){s->"%.3f,%.3f,%.3f,%.3f,%.3f,%.0f,%.0f".format(Locale.US,s.similarity,s.visualChange,s.planeMotion,s.ultraWatch,s.red,s.stable)}
+        val seq=sequenceSamples.joinToString(";"){x->"%.3f,%.3f,%.3f,%.3f,%.3f,%.0f,%.0f".format(Locale.US,x.similarity,x.visualChange,x.planeMotion,x.ultraWatch,x.red,x.stable)}
         database.saveRound(StoredBehaviour(roundNumber,now,maxSimilarity,avg,similaritySamples,maxVisualChange,maxPlaneMotion,maxUltraWatch,preMaxSimilarity,preMaxVisualChange,preMaxPlaneMotion,preMaxUltraWatch,seq,endingMarkers.joinToString("|")))
     }
+
+    private fun publish(events: List<VisualEvent>) {
+        val match = events.lastOrNull { it.type == "PRE_FLY_AWAY_MATCH" || it.type == "BEHAVIOUR_SIMILARITY" }
+        if (match != null) {
+            val high = match.type == "PRE_FLY_AWAY_MATCH" || match.score >= 82.0
+            val strong = match.score >= 65.0
+            val label = when {
+                high -> "BEHAVIOUR: %.0f%% HIGH MATCH".format(match.score)
+                strong -> "BEHAVIOUR: %.0f%% STRONG MATCH".format(match.score)
+                else -> "BEHAVIOUR: %.0f%% MATCH".format(match.score)
+            }
+            uiHandler.post { overlay?.text = label }
+        } else {
+            publishStatus(engine.currentSimilarity())
+        }
+    }
+
+    private fun publishStatus(score: Double) {
+        uiHandler.post {
+            overlay?.text = if (score > 0.45)
+                "BEHAVIOUR: %.0f%% MATCH".format(score * 100.0)
+            else
+                "BEHAVIOUR: MONITORING"
+        }
+    }
+
+    private fun showOverlay() {
+        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        val tv = TextView(this)
+        tv.text = "BEHAVIOUR: MONITORING"
+        tv.textSize = 13f
+        tv.setTextColor(0xFFFFFFFF.toInt())
+        tv.setBackgroundColor(0xCC202124.toInt())
+        tv.setPadding(18, 10, 18, 10)
+        val lp = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        )
+        lp.gravity = Gravity.TOP or Gravity.START
+        lp.x = overlayX
+        lp.y = overlayY
+        var downX = 0f
+        var downY = 0f
+        var startX = 0
+        var startY = 0
+        tv.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.rawX; downY = e.rawY
+                    startX = lp.x; startY = lp.y
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    lp.x = startX + (e.rawX - downX).toInt()
+                    lp.y = startY + (e.rawY - downY).toInt()
+                    windowManager?.updateViewLayout(tv, lp)
+                    true
+                }
+                else -> true
+            }
+        }
+        windowManager?.addView(tv, lp)
+        overlay = tv
+    }
+
+    private fun notification(): Notification {
+        val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        nm.createNotificationChannel(
+            NotificationChannel("scan", "UltraScan", NotificationManager.IMPORTANCE_LOW)
+        )
+        return Notification.Builder(this, "scan")
+            .setContentTitle("Aviator Behaviour AI")
+            .setContentText("UltraScan monitoring active")
+            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .build()
+    }
+
+    override fun onDestroy() {
+        reader?.close()
+        reader = null
+        projection?.stop()
+        overlay?.let { windowManager?.removeView(it) }
+        overlay = null
+        captureThread.quitSafely()
+        database.close()
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?) = null
 }
