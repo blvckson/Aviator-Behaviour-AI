@@ -94,68 +94,14 @@ class MainActivity: Activity() {
         val records=database.latest(200)
         if(records.isEmpty()){
             AlertDialog.Builder(this).setTitle("STATEMENT")
-                .setMessage("No completed rounds are available yet. Start UltraScan and allow several rounds to be recorded.")
+                .setMessage("No completed rounds are available yet.")
                 .setPositiveButton("CLOSE",null).show()
             return
         }
         val a=BehaviourAnalyser().analyse(records)
-        val overall=a.overallPreFlySimilarity
-        val difference=a.endingDifferenceScore
-        val activityScore=((a.averagePreFlyVisualChange.coerceIn(0.0,100.0)*.25)+
-                (a.averagePreFlyUltraWatch.coerceIn(0.0,100.0)*.25)+
-                (a.averagePreFlySimilarity.coerceIn(0.0,100.0)*.30)+
-                (minOf(100.0,a.averagePreFlyPlaneMotion)*.20))
-        val overallText=when{
-            overall>=80 -> "The stored rounds show a strong and repeated overall pre-fly-away behavioural pattern."
-            overall>=60 -> "The stored rounds show a moderate and recurring overall pre-fly-away behavioural pattern."
-            else -> "The stored rounds show a weak or inconsistent overall pre-fly-away behavioural pattern."
-        }
-        val differenceText=when{
-            difference>=60 -> "The pre-fly-away activity is clearly different from the earlier stages of the rounds."
-            difference>=30 -> "The pre-fly-away activity shows a noticeable difference from the earlier stages."
-            else -> "The pre-fly-away activity is not strongly separated from the earlier stages."
-        }
-        val activityText=when{
-            activityScore>=75 -> "The recorded rounds show a strong and recognizable overall pre-fly-away transition pattern."
-            activityScore>=50 -> "The recorded rounds show a moderate overall pre-fly-away transition pattern with some variation."
-            else -> "The recorded rounds show a weak or inconsistent overall pre-fly-away transition pattern."
-        }
-        val overallBehaviour=when{
-            overall>=80 && difference>=60 -> "Overall, the pre-fly-away behaviour appears highly recognizable: the late-stage visual and movement pattern repeatedly separates from the earlier round behaviour."
-            overall>=60 && difference>=30 -> "Overall, the pre-fly-away behaviour appears moderately recognizable: a recurring late-stage transition is visible, although its strength varies between rounds."
-            else -> "Overall, the pre-fly-away behaviour is not yet consistently distinguishable from the earlier round behaviour in the stored observations."
-        }
-        val phaseText=when{
-            a.endingChangePhase>=0.75 -> "The strongest behavioural change is concentrated late in the round."
-            a.endingChangePhase>=0.50 -> "The strongest behavioural change develops through the latter part of the round."
-            else -> "The strongest behavioural change is appearing relatively early and should be interpreted cautiously."
-        }
-        val msg=StringBuilder()
-            .append("OVERALL PRE-FLY-AWAY BEHAVIOUR\n")
-            .append(overallBehaviour).append("\n")
-            .append(phaseText).append("\n")
-            .append("The AI is describing the overall visual behaviour as a pattern across rounds, rather than using the displayed multiplier value itself. ")
-            .append("It considers the changing appearance/graphics, plane movement and trajectory, visual transition, UltraWatch/stability and repeated sequence behaviour. ")
-            .append("Speed and the red multiplier reading remain excluded from the overall similarity.\n\n")
-            .append("Overall pre-fly-away similarity: ").append(pct(overall)).append("\n")
-            .append("Overall ending difference from earlier stages: ").append(pct(difference)).append("\n\n")
-            .append("OVERALL ACTIVITY STRENGTH\n")
-            .append(activityText).append("\n")
-            .append("DIFFERENCE\n")
-            .append(differenceText).append("\n")
-            .append("Overall ending difference: ").append(pct(difference)).append("\n\n")
-            .append("ALL ACTIVITIES\n")
-            .append(activityText).append("\n")
-            .append("Pre-fly similarity: ").append(pct(a.averagePreFlySimilarity)).append("\n")
-            .append("Visual transition: ").append(pct(a.averagePreFlyVisualChange)).append("\n")
-            .append("Plane movement/trajectory: ").append(number(a.averagePreFlyPlaneMotion)).append("\n")
-            .append("UltraWatch: ").append(pct(a.averagePreFlyUltraWatch)).append("\n")
-            .append("Historical sequence agreement: ").append(pct(a.sequenceAgreement)).append("\n\n")
-            .append("INTERPRETATION\n")
-            .append("The statement is generated from the recorded visual behaviour across ").append(a.rounds)
-            .append(" completed rounds. Speed and the red multiplier reading are excluded from the overall similarity; movement/trajectory remains included. ")
-            .append("This describes observed behavioural similarity and difference only; it does not guarantee what the next round will do.")
-        AlertDialog.Builder(this).setTitle("STATEMENT").setMessage(msg.toString()).setPositiveButton("CLOSE",null).show()
+        val similarity=pct(a.overallPreFlySimilarity)
+        val msg="The pre-fly-away similarities show that the plane behaves differently toward the end of the round, and the behaviour remains $similarity the same across the stored rounds."
+        AlertDialog.Builder(this).setTitle("STATEMENT").setMessage(msg).setPositiveButton("CLOSE",null).show()
     }
 
     private fun signed(value:Double):String=(if(value>=0)"+" else "")+"%.1f".format(Locale.US,value)+" pts"
