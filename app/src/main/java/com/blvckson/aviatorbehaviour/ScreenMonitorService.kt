@@ -11,11 +11,13 @@ import android.media.projection.MediaProjectionManager
 import android.os.*
 import android.view.*
 import android.widget.TextView
+import kotlin.math.max
 
 class ScreenMonitorService : Service() {
     private var projection: MediaProjection? = null
     private var reader: ImageReader? = null
     private val engine = UltraScanEngine()
+    private lateinit var database: BehaviourDatabase
     private val captureThread = HandlerThread("UltraScanCapture", Process.THREAD_PRIORITY_DISPLAY)
     private lateinit var captureHandler: Handler
     private lateinit var uiHandler: Handler
@@ -24,8 +26,23 @@ class ScreenMonitorService : Service() {
     private var overlayX = 24
     private var overlayY = 80
 
+    private var roundActive = false
+    private var roundNumber = 0
+    private var similaritySum = 0.0
+    private var similaritySamples = 0
+    private var maxSimilarity = 0.0
+    private var maxVisualChange = 0.0
+    private var maxPlaneMotion = 0.0
+    private var maxUltraWatch = 0.0
+    private var preMaxSimilarity = 0.0
+    private var preMaxVisualChange = 0.0
+    private var preMaxPlaneMotion = 0.0
+    private var preMaxUltraWatch = 0.0
+    private val preFlyAwayWindowMs = 1800L
+
     override fun onCreate() {
         super.onCreate()
+        database = BehaviourDatabase(this)
         captureThread.start()
         captureHandler = Handler(captureThread.looper)
         uiHandler = Handler(Looper.getMainLooper())
@@ -61,7 +78,9 @@ class ScreenMonitorService : Service() {
                 plane.buffer.rewind()
                 bmp.copyPixelsFromBuffer(plane.buffer)
                 val frame = if (paddedWidth == w) bmp else Bitmap.createBitmap(bmp, 0, 0, w, h)
-                val events = engine.inspect(frame, System.currentTimeMillis())
+                val now = System.currentTimeMillis()
+                val events = engine.inspect(frame, now)
+                recordEvents(events, now)
                 if (frame !== bmp) bmp.recycle()
                 frame.recycle()
                 if (events.isNotEmpty()) publish(events)
@@ -75,6 +94,83 @@ class ScreenMonitorService : Service() {
             "UltraScan", w, h, m.densityDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
             reader!!.surface, null, captureHandler
+        )
+    }
+
+    private fun recordEvents(events: List<VisualEvent>, now: Long) {
+        val similarityEvents = events.filter { it.type == "BEHAVIOUR_SIMILARITY" || it.type == "PRE_FLY_AWAY_MATCH" }
+        for (event in similarityEvents) {
+            maxSimilarity = max(maxSimilarity, event.score)
+            similaritySum += event.score
+            similaritySamples++
+        }
+
+        for (event in events) {
+            when (event.type) {
+                "FRAME_CHANGE" -> maxVisualChange = max(maxVisualChange, event.score * 100.0)
+                "PLANE_MOTION" -> maxPlaneMotion = max(maxPlaneMotion, event.score)
+                "ULTRAWATCH" -> maxUltraWatch = max(maxUltraWatch, event.score * 100.0)
+            }
+        }
+
+        val lastPlaneSeen = engine.lastPlaneSeenAt()
+        val inPreFlyAwayWindow = lastPlaneSeen > 0L && now - lastPlaneSeen <= preFlyAwayWindowMs
+        if (inPreFlyAwayWindow) {
+            for (event in events) {
+                when (event.type) {
+                    "BEHAVIOUR_SIMILARITY", "PRE_FLY_AWAY_MATCH" ->
+                        preMaxSimilarity = max(preMaxSimilarity, event.score)
+                    "FRAME_CHANGE" ->
+                        preMaxVisualChange = max(preMaxVisualChange, event.score * 100.0)
+                    "PLANE_MOTION" ->
+                        preMaxPlaneMotion = max(preMaxPlaneMotion, event.score)
+                    "ULTRAWATCH" ->
+                        preMaxUltraWatch = max(preMaxUltraWatch, event.score * 100.0)
+                }
+            }
+        }
+
+        val disappeared = events.any { it.type == "PLANE_DISAPPEAR" }
+        if (disappeared && roundActive) {
+            saveRound(now)
+            roundActive = false
+        }
+
+        if (events.any { it.type == "PLANE_MOTION" } || engine.lastPlaneSeenAt() == now) {
+            if (!roundActive) {
+                roundActive = true
+                roundNumber = database.nextRoundNumber()
+                similaritySum = 0.0
+                similaritySamples = 0
+                maxSimilarity = 0.0
+                maxVisualChange = 0.0
+                maxPlaneMotion = 0.0
+                maxUltraWatch = 0.0
+                preMaxSimilarity = 0.0
+                preMaxVisualChange = 0.0
+                preMaxPlaneMotion = 0.0
+                preMaxUltraWatch = 0.0
+            }
+        }
+    }
+
+    private fun saveRound(now: Long) {
+        val avg = if (similaritySamples > 0) similaritySum / similaritySamples else 0.0
+        database.saveRound(
+            StoredBehaviour(
+                roundNumber,
+                now,
+                maxSimilarity,
+                avg,
+                similaritySamples,
+                maxVisualChange,
+                maxPlaneMotion,
+                maxUltraWatch,
+                preMaxSimilarity,
+                preMaxVisualChange,
+                preMaxPlaneMotion,
+                preMaxUltraWatch
+            )
         )
     }
 
@@ -164,6 +260,7 @@ class ScreenMonitorService : Service() {
         overlay?.let { windowManager?.removeView(it) }
         overlay = null
         captureThread.quitSafely()
+        database.close()
         super.onDestroy()
     }
 
