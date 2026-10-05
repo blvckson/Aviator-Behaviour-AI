@@ -11,3 +11,4 @@ data class BehaviourSample(
     val red:Double,
     val stable:Double
 )
+// Build #8 baseline preserved; behaviour-memory commands are additive.
