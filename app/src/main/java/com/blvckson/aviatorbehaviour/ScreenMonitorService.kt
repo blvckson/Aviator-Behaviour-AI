@@ -11,10 +11,9 @@ import android.media.projection.MediaProjectionManager
 import android.os.*
 import android.view.*
 import android.widget.TextView
-import java.util.Locale
-import kotlin.math.max
 import java.util.ArrayDeque
 import java.util.Locale
+import kotlin.math.max
 
 class ScreenMonitorService : Service() {
     private var projection: MediaProjection? = null
@@ -44,9 +43,6 @@ class ScreenMonitorService : Service() {
     private var preMaxPlaneMotion = 0.0
     private var preMaxUltraWatch = 0.0
     private var roundActive = false
-    private var lastRoundEndAt = 0L
-
-    private var roundActive = false
     private var roundNumber = 0
     private var similaritySum = 0.0
     private var similaritySamples = 0
@@ -65,7 +61,7 @@ class ScreenMonitorService : Service() {
     private val sampleIntervalMs = 100L
     private val endingMarkers = LinkedHashSet<String>()
 
-    private data class BehaviourSample(
+    private data class LegacyUnusedBehaviourSample(
         val time: Long,
         val similarity: Double,
         val visualChange: Double,
@@ -118,7 +114,6 @@ class ScreenMonitorService : Service() {
                 recordEvents(events, now)
                 if (frame !== bmp) bmp.recycle()
                 frame.recycle()
-                recordBehaviour(events, System.currentTimeMillis())
                 if (events.isNotEmpty()) publish(events)
                 else publishStatus(engine.currentSimilarity())
             } finally {
@@ -172,73 +167,8 @@ class ScreenMonitorService : Service() {
 
     private fun saveRound(now:Long){
         val avg=if(similaritySamples>0) similaritySum/similaritySamples else 0.0
-        val seq=sequenceSamples.joinToString(";"){x->"%.3f,%.3f,%.3f,%.3f,%.3f,%.0f,%.0f".format(Locale.US,x.similarity,x.visualChange,x.planeMotion,x.ultraWatch,x.red,x.stable)}
+        val seq=sequenceSamples.joinToString(";"){x->"%.3f,%.3f,%.3f,%.3f,%.3f,%.0f,%.3f".format(Locale.US,x.similarity,x.visualChange,x.planeMotion,x.ultraWatch,x.red,x.stable,x.time.toDouble()/1000.0)}
         database.saveRound(StoredBehaviour(roundNumber,now,maxSimilarity,avg,similaritySamples,maxVisualChange,maxPlaneMotion,maxUltraWatch,preMaxSimilarity,preMaxVisualChange,preMaxPlaneMotion,preMaxUltraWatch,seq,endingMarkers.joinToString("|")))
-    }
-
-    private fun recordBehaviour(events: List<VisualEvent>, now: Long) {
-        val sim = engine.currentSimilarity() * 100.0
-        var visual = 0.0
-        var plane = 0.0
-        var ultra = 0.0
-        var red = 0.0
-        var stable = 0.0
-        for (e in events) {
-            when (e.type) {
-                "FRAME_CHANGE", "MULTIPLIER_VISUAL_CHANGE" -> visual = maxOf(visual, e.score)
-                "PLANE_MOTION" -> plane = maxOf(plane, e.score)
-                "ULTRAWATCH" -> ultra = maxOf(ultra, e.score)
-                "ENDING_RED_VISUAL" -> red = maxOf(red, e.score)
-                "MULTIPLIER_VISUAL_STABLE" -> stable = 1.0
-                "ENDING_STATE_CLUSTER" -> { endingMarkers.add("RED_STABLE"); red = maxOf(red, e.score); stable = 1.0 }
-                "PLANE_DISAPPEAR" -> endingMarkers.add("PLANE_DISAPPEAR")
-                "PRE_FLY_AWAY_MATCH" -> endingMarkers.add("PRE_FLY_MATCH")
-            }
-        }
-        if (events.any { it.type == "BEHAVIOUR_SIMILARITY" }) {
-            roundActive = true
-            maxSimilarity = maxOf(maxSimilarity, sim)
-            sumSimilarity += sim
-            similaritySamples++
-        }
-        maxVisualChange = maxOf(maxVisualChange, visual)
-        maxPlaneMotion = maxOf(maxPlaneMotion, plane)
-        maxUltraWatch = maxOf(maxUltraWatch, ultra)
-        if (now - lastStoredSampleAt >= 100L) {
-            sequenceSamples.add(BehaviourSample(now, sim, visual, plane, ultra, red, stable))
-            lastStoredSampleAt = now
-        }
-        val end = events.any { it.type == "PLANE_DISAPPEAR" || it.type == "ENDING_STATE_CLUSTER" }
-        if (end && roundActive && now != lastRoundEndAt) {
-            lastRoundEndAt = now
-            val pre = sequenceSamples.filter { it.time >= now - 1800L }
-            for (s in pre) {
-                preMaxSimilarity = maxOf(preMaxSimilarity, s.similarity)
-                preMaxVisualChange = maxOf(preMaxVisualChange, s.visualChange)
-                preMaxPlaneMotion = maxOf(preMaxPlaneMotion, s.planeMotion)
-                preMaxUltraWatch = maxOf(preMaxUltraWatch, s.ultraWatch)
-            }
-            val seq = sequenceSamples.joinToString(";") {
-                "%.3f,%.3f,%.3f,%.3f,%.3f,%.0f,%.3f".format(
-                    Locale.US, it.similarity, it.visualChange, it.planeMotion,
-                    it.ultraWatch, it.red, it.stable, it.time.toDouble() / 1000.0
-                )
-            }
-            behaviourDb.saveRound(StoredBehaviour(
-                behaviourDb.nextRoundNumber(), now, maxSimilarity,
-                if (similaritySamples == 0) 0.0 else sumSimilarity / similaritySamples,
-                similaritySamples, maxVisualChange, maxPlaneMotion, maxUltraWatch,
-                preMaxSimilarity, preMaxVisualChange, preMaxPlaneMotion, preMaxUltraWatch,
-                seq, endingMarkers.joinToString("|")
-            ))
-            sequenceSamples.clear()
-            endingMarkers.clear()
-            maxSimilarity = 0.0; sumSimilarity = 0.0; similaritySamples = 0
-            maxVisualChange = 0.0; maxPlaneMotion = 0.0; maxUltraWatch = 0.0
-            preMaxSimilarity = 0.0; preMaxVisualChange = 0.0
-            preMaxPlaneMotion = 0.0; preMaxUltraWatch = 0.0
-            roundActive = false
-        }
     }
 
     private fun publish(events: List<VisualEvent>) {
