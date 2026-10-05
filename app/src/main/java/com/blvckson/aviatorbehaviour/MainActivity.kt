@@ -44,7 +44,7 @@ class MainActivity: Activity() {
 
     private fun showStoredBehaviours(preFlyOnly:Boolean){
         val records=if(preFlyOnly)database.latestPreFlyAway()else database.latest()
-        val title=if(preFlyOnly)"PRE-FLY-AWAY FOCUS"else"STORED ROUND BEHAVIOUR"
+        val title=if(preFlyOnly)"PRE-FLY-AWAY FOCUS"else "STORED ROUND BEHAVIOUR"
         if(records.isEmpty()){AlertDialog.Builder(this).setTitle(title).setMessage("No completed round behaviour has been stored yet.").setPositiveButton("OK",null).show();return}
         val overall=BehaviourAnalyser().analyse(database.latest(200)).overallPreFlySimilarity
         val text=StringBuilder()
@@ -89,7 +89,7 @@ class MainActivity: Activity() {
         AlertDialog.Builder(this).setTitle("END-OF-ROUND ANALYSER").setMessage(msg.toString()).setPositiveButton("CLOSE",null).show()
     }
 
-    private fun signed(value:Double):String=(if(value>=0)"+"else"")+"%.1f".format(Locale.US,value)+" pts"
+    private fun signed(value:Double):String=(if(value>=0)"+"else "")+"%.1f".format(Locale.US,value)+" pts"
     private fun confirmClear(){
         AlertDialog.Builder(this).setTitle("Clear behaviour storage?")
             .setMessage("This removes the stored round behaviour and the separate pre-fly-away records.")
@@ -108,7 +108,7 @@ class MainActivity: Activity() {
     private fun showStored(preOnly:Boolean){
         val rows=if(preOnly)BehaviourDatabase(this).latestPreFlyAway(40)else BehaviourDatabase(this).latest(40)
         val text=if(rows.isEmpty())"No stored behaviour rounds yet."else rows.joinToString("\n\n"){r->"Round "+r.round+": samples="+r.similaritySamples+"\npre-fly similarity="+String.format("%.1f",r.preFlyAwayMaxSimilarity)+"  visual="+String.format("%.3f",r.preFlyAwayMaxVisualChange)+"  plane="+String.format("%.1f",r.preFlyAwayMaxPlaneMotion)+"  UltraWatch="+String.format("%.1f",r.preFlyAwayMaxUltraWatch)+"\nmarkers="+r.endingMarkers+"\nending multiplier="+if(r.endingMultiplier.isBlank())"not captured"else r.endingMultiplier}
-        AlertDialog.Builder(this).setTitle(if(preOnly)"Pre-Fly-Away Focus"else"Stored Round Behaviour").setMessage(text).setPositiveButton("OK",null).show()
+        AlertDialog.Builder(this).setTitle(if(preOnly)"Pre-Fly-Away Focus"else "Stored Round Behaviour").setMessage(text).setPositiveButton("OK",null).show()
     }
     private fun showAnalysis(){
         val a=BehaviourAnalyser().analyse(BehaviourDatabase(this).latest(80))
