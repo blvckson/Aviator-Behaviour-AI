@@ -2,6 +2,7 @@ package com.blvckson.aviatorbehaviour
 
 import android.graphics.Bitmap
 import kotlin.math.abs
+import kotlin.math.absoluteValue
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -12,6 +13,9 @@ class UltraScanEngine {
     private var lastY = Float.NaN
     private var lastV = 0f
     private var lastT = 0L
+    private var lastDx = 0f
+    private var lastDy = 0f
+    private var movementConsistency = 0.0
     private var similarity = 0.0
     private var similarityHold = 0
 
@@ -20,7 +24,10 @@ class UltraScanEngine {
         val p = previous
         if (p != null && p.width == frame.width && p.height == frame.height) {
             val change = sampleChange(p, frame)
-            if (change > 0.018) out.add(VisualEvent(now, "FRAME_CHANGE", change, "whole-screen visual change"))
+            if (change > 0.018) out.add(VisualEvent(now, "FRAME_CHANGE", change, "whole-screen appearance/graphics change"))
+
+            val graphics = graphicsChange(p, frame)
+            if (graphics > 0.012) out.add(VisualEvent(now, "GRAPHICS_APPEARANCE", graphics * 100.0, "whole-screen graphics/appearance signature change"))
 
             val centerChange = roiChange(p, frame, 0.18, 0.18, 0.82, 0.62)
             if (centerChange > 0.012)
@@ -42,11 +49,14 @@ class UltraScanEngine {
             else if (!plane.found && !lastX.isNaN())
                 out.add(VisualEvent(now, "PLANE_DISAPPEAR", 1.0, "possible round transition"))
 
-            val motionScore = min(1.0, speed / 55.0)
-            val accelScore = min(1.0, accel / 120.0)
+            val movementScore = movementConsistency
+            val appearanceScore = min(1.0, (change * 0.55 + graphics * 0.45) / 0.16)
             val transitionScore = min(1.0, change / 0.22)
-            val centerScore = min(1.0, centerChange / 0.12)
-            val candidate = motionScore * 0.28 + accelScore * 0.20 + transitionScore * 0.27 + centerScore * 0.25
+            val multiplierVisualScore = min(1.0, centerChange / 0.12)
+            // Similarity uses appearance/graphics, movement behaviour and multiplier-area
+            // visual behaviour. Raw multiplier figures, speed and acceleration are excluded.
+            val candidate = movementScore * 0.30 + appearanceScore * 0.25 +
+                transitionScore * 0.20 + multiplierVisualScore * 0.25
             similarity = similarity * 0.72 + candidate * 0.28
             if (similarity > 0.52) similarityHold++ else similarityHold = max(0, similarityHold - 1)
 
@@ -78,6 +88,25 @@ class UltraScanEngine {
 
     fun currentSimilarity(): Double = similarity
     fun lastPlaneSeenAt(): Long = lastT
+
+    private fun graphicsChange(a: Bitmap, b: Bitmap): Double {
+        val sx = 12; val sy = 12
+        var total = 0.0; var n = 0
+        for (j in 0 until sy) for (i in 0 until sx) {
+            val x = i * (b.width - 1) / (sx - 1)
+            val y = j * (b.height - 1) / (sy - 1)
+            val ca = a.getPixel(x, y); val cb = b.getPixel(x, y)
+            val ar = (ca shr 16) and 255; val ag = (ca shr 8) and 255; val ab = ca and 255
+            val br = (cb shr 16) and 255; val bg = (cb shr 8) and 255; val bb = cb and 255
+            val la = (0.299 * ar + 0.587 * ag + 0.114 * ab) / 255.0
+            val lb = (0.299 * br + 0.587 * bg + 0.114 * bb) / 255.0
+            val caa = ((ar - ag).absoluteValue + (ag - ab).absoluteValue) / 510.0
+            val cbb = ((br - bg).absoluteValue + (bg - bb).absoluteValue) / 510.0
+            total += abs(la - lb) * 0.65 + abs(caa - cbb) * 0.35
+            n++
+        }
+        return total / max(1, n)
+    }
 
     private fun sampleChange(a: Bitmap, b: Bitmap): Double {
         val sx = 10; val sy = 10
@@ -144,7 +173,22 @@ class UltraScanEngine {
         if (found && !lastX.isNaN() && lastT > 0) {
             val dt = ((t - lastT).coerceAtLeast(1)) / 1000f
             vx = (x - lastX) / dt; vy = (y - lastY) / dt
-            val s = sqrt(vx * vx + vy * vy); acc = (s - lastV) / dt; lastV = s
+            val s = sqrt(vx * vx + vy * vy)
+            acc = (s - lastV) / dt
+            lastV = s
+            val dx = x - lastX
+            val dy = y - lastY
+            val norm = sqrt(dx * dx + dy * dy)
+            if (norm > 0.5f) {
+                val ndx = dx / norm
+                val ndy = dy / norm
+                if (lastDx != 0f || lastDy != 0f) {
+                    val directionalAgreement = ((ndx * lastDx + ndy * lastDy) + 1f) * 0.5f
+                    movementConsistency = movementConsistency * 0.65 + directionalAgreement * 0.35
+                } else movementConsistency = 0.5
+                lastDx = ndx
+                lastDy = ndy
+            }
         }
         if (found) { lastX = x; lastY = y; lastT = t }
         return PlaneState(found, x, y, vx, vy, acc)
