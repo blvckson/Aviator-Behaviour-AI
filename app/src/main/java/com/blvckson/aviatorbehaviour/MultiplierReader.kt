@@ -44,7 +44,7 @@ class MultiplierReader {
             val v=matcher.group(1)?.toDoubleOrNull()?:continue
             if(v>=1.0&&v<=10000000.0&&v>best)best=v
         }
-        return if(best<0)"":"%.2fx".format(Locale.US,best)
+        return if(best<0) "" else "%.2fx".format(Locale.US,best)
     }
     fun close(){recognizer.close()}
 }
