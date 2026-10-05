@@ -22,7 +22,7 @@ class UltraScanEngine {
             val change = sampleChange(p, frame)
             if (change > 0.018) out.add(VisualEvent(now, "FRAME_CHANGE", change, "visual change"))
             val plane = trackPlane(frame, now)
-            val speed = if (plane.found) sqrt(plane.vx * plane.vx + plane.vy * plane.vy) else 0.0
+            val speed: Double = if (plane.found) sqrt((plane.vx * plane.vx + plane.vy * plane.vy).toDouble()) else 0.0
             val accel = abs(plane.acceleration.toDouble())
             if (plane.found && (speed > 5.0 || accel > 18.0))
                 out.add(VisualEvent(now, "PLANE_MOTION", speed, "x="+plane.x+",y="+plane.y+",acc="+plane.acceleration))
