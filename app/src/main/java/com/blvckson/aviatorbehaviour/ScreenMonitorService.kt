@@ -28,20 +28,6 @@ class ScreenMonitorService : Service() {
     private var overlayX = 24
     private var overlayY = 80
 
-    private val behaviourDb by lazy { BehaviourDatabase(this) }
-    private val sequenceSamples = ArrayList<BehaviourSample>()
-    private val endingMarkers = LinkedHashSet<String>()
-    private var lastStoredSampleAt = 0L
-    private var maxSimilarity = 0.0
-    private var sumSimilarity = 0.0
-    private var similaritySamples = 0
-    private var maxVisualChange = 0.0
-    private var maxPlaneMotion = 0.0
-    private var maxUltraWatch = 0.0
-    private var preMaxSimilarity = 0.0
-    private var preMaxVisualChange = 0.0
-    private var preMaxPlaneMotion = 0.0
-    private var preMaxUltraWatch = 0.0
     private var roundActive = false
     private var roundNumber = 0
     private var similaritySum = 0.0
@@ -60,16 +46,6 @@ class ScreenMonitorService : Service() {
     private var lastStoredSampleAt = 0L
     private val sampleIntervalMs = 100L
     private val endingMarkers = LinkedHashSet<String>()
-
-    private data class LegacyUnusedBehaviourSample(
-        val time: Long,
-        val similarity: Double,
-        val visualChange: Double,
-        val planeMotion: Double,
-        val ultraWatch: Double,
-        val red: Double,
-        val stable: Double
-    )
 
     override fun onCreate() {
         super.onCreate()
