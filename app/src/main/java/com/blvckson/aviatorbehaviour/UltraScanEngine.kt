@@ -175,7 +175,17 @@ class UltraScanEngine {
             val r = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
             if (r > 170 && r > g * 1.25 && r > bl * 1.25) { sx += x; sy += y; n++ }
         }
-        val found = n > 3
+        var found = n > 3
+        if (!found && local) {
+            // Fast local tracking gets a global fallback on loss, preserving plane detection.
+            sx = 0.0; sy = 0.0; n = 0
+            for (y0 in 0 until b.height step 10) for (x0 in 0 until b.width step 10) {
+                val c = b.getPixel(x0, y0)
+                val r = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
+                if (r > 170 && r > g * 1.25 && r > bl * 1.25) { sx += x0; sy += y0; n++ }
+            }
+            found = n > 3
+        }
         val x = if (found) (sx / n).toFloat() else Float.NaN
         val y = if (found) (sy / n).toFloat() else Float.NaN
         var vx = 0f; var vy = 0f; var acc = 0f
@@ -199,7 +209,15 @@ class UltraScanEngine {
                 lastDy = ndy
             }
         }
-        if (found) { lastX = x; lastY = y; lastT = t; lastPlaneScanFrame = frameNo }
+        if (found) {
+            lastX = x; lastY = y; lastT = t; lastPlaneScanFrame = frameNo
+        } else if (!lastX.isNaN()) {
+            // End-of-round boundary: do not carry movement consistency into the next round.
+            movementConsistency = 0.0
+            lastDx = 0f
+            lastDy = 0f
+            lastV = 0f
+        }
         return PlaneState(found, x, y, vx, vy, acc)
     }
 }
