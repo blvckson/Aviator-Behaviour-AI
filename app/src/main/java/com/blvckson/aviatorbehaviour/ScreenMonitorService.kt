@@ -12,6 +12,7 @@ import android.os.*
 import android.view.*
 import android.widget.TextView
 import kotlin.math.max
+import java.util.ArrayDeque
 
 class ScreenMonitorService : Service() {
     private var projection: MediaProjection? = null
@@ -39,6 +40,15 @@ class ScreenMonitorService : Service() {
     private var preMaxPlaneMotion = 0.0
     private var preMaxUltraWatch = 0.0
     private val preFlyAwayWindowMs = 1800L
+    private val recentSamples = ArrayDeque<BehaviourSample>()
+
+    private data class BehaviourSample(
+        val time: Long,
+        val similarity: Double,
+        val visualChange: Double,
+        val planeMotion: Double,
+        val ultraWatch: Double
+    )
 
     override fun onCreate() {
         super.onCreate()
@@ -113,27 +123,40 @@ class ScreenMonitorService : Service() {
             }
         }
 
-        val lastPlaneSeen = engine.lastPlaneSeenAt()
-        val inPreFlyAwayWindow = lastPlaneSeen > 0L && now - lastPlaneSeen <= preFlyAwayWindowMs
-        if (inPreFlyAwayWindow) {
-            for (event in events) {
-                when (event.type) {
-                    "BEHAVIOUR_SIMILARITY", "PRE_FLY_AWAY_MATCH" ->
-                        preMaxSimilarity = max(preMaxSimilarity, event.score)
-                    "FRAME_CHANGE" ->
-                        preMaxVisualChange = max(preMaxVisualChange, event.score * 100.0)
-                    "PLANE_MOTION" ->
-                        preMaxPlaneMotion = max(preMaxPlaneMotion, event.score)
-                    "ULTRAWATCH" ->
-                        preMaxUltraWatch = max(preMaxUltraWatch, event.score * 100.0)
-                }
+        var sampleSimilarity = 0.0
+        var sampleVisual = 0.0
+        var samplePlane = 0.0
+        var sampleUltra = 0.0
+        for (event in events) {
+            when (event.type) {
+                "BEHAVIOUR_SIMILARITY", "PRE_FLY_AWAY_MATCH" ->
+                    sampleSimilarity = max(sampleSimilarity, event.score)
+                "FRAME_CHANGE" ->
+                    sampleVisual = max(sampleVisual, event.score * 100.0)
+                "PLANE_MOTION" ->
+                    samplePlane = max(samplePlane, event.score)
+                "ULTRAWATCH" ->
+                    sampleUltra = max(sampleUltra, event.score * 100.0)
             }
+        }
+        recentSamples.addLast(BehaviourSample(now, sampleSimilarity, sampleVisual, samplePlane, sampleUltra))
+        while (recentSamples.isNotEmpty() && now - recentSamples.peekFirst().time > preFlyAwayWindowMs) {
+            recentSamples.removeFirst()
         }
 
         val disappeared = events.any { it.type == "PLANE_DISAPPEAR" }
         if (disappeared && roundActive) {
+            for (sample in recentSamples) {
+                if (now - sample.time <= preFlyAwayWindowMs) {
+                    preMaxSimilarity = max(preMaxSimilarity, sample.similarity)
+                    preMaxVisualChange = max(preMaxVisualChange, sample.visualChange)
+                    preMaxPlaneMotion = max(preMaxPlaneMotion, sample.planeMotion)
+                    preMaxUltraWatch = max(preMaxUltraWatch, sample.ultraWatch)
+                }
+            }
             saveRound(now)
             roundActive = false
+            recentSamples.clear()
         }
 
         if (events.any { it.type == "PLANE_MOTION" } || engine.lastPlaneSeenAt() == now) {
