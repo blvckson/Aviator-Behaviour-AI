@@ -8,6 +8,10 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 class UltraScanEngine {
+    private val focusLeft=0.08
+    private val focusTop=0.08
+    private val focusRight=0.92
+    private val focusBottom=0.72
     private var previous: Bitmap? = null
     private var lastX = Float.NaN
     private var lastY = Float.NaN
@@ -93,11 +97,15 @@ class UltraScanEngine {
     fun lastPlaneSeenAt(): Long = lastT
 
     private fun graphicsChange(a: Bitmap, b: Bitmap): Double {
-        val sx = 12; val sy = 12
+        val sx = 12; val sy = 10
         var total = 0.0; var n = 0
         for (j in 0 until sy) for (i in 0 until sx) {
-            val x = i * (b.width - 1) / (sx - 1)
-            val y = j * (b.height - 1) / (sy - 1)
+            val x0=(b.width*focusLeft).toInt().coerceIn(0,b.width-1)
+            val x1=(b.width*focusRight).toInt().coerceIn(x0+1,b.width-1)
+            val y0=(b.height*focusTop).toInt().coerceIn(0,b.height-1)
+            val y1=(b.height*focusBottom).toInt().coerceIn(y0+1,b.height-1)
+            val x=x0+i*(x1-x0)/(sx-1)
+            val y=y0+j*(y1-y0)/(sy-1)
             val ca = a.getPixel(x, y); val cb = b.getPixel(x, y)
             val ar = (ca shr 16) and 255; val ag = (ca shr 8) and 255; val ab = ca and 255
             val br = (cb shr 16) and 255; val bg = (cb shr 8) and 255; val bb = cb and 255
@@ -112,7 +120,7 @@ class UltraScanEngine {
     }
 
     private fun sampleChange(a: Bitmap, b: Bitmap): Double {
-        val sx = 10; val sy = 10
+        val sx = 10; val sy = 8
         var total = 0L; var n = 0
         for (j in 0 until sy) for (i in 0 until sx) {
             val x = i * (b.width - 1) / (sx - 1)
@@ -166,10 +174,14 @@ class UltraScanEngine {
         var sx = 0.0; var sy = 0.0; var n = 0
         val step = if (!lastX.isNaN() && frameNo - lastPlaneScanFrame <= 2) 10 else 8
         val local = !lastX.isNaN() && frameNo - lastPlaneScanFrame <= 2
-        val xStart = if (local) max(0, lastX.toInt() - b.width / 5) else 0
-        val xEnd = if (local) min(b.width, lastX.toInt() + b.width / 5) else b.width
-        val yStart = if (local) max(0, lastY.toInt() - b.height / 5) else 0
-        val yEnd = if (local) min(b.height, lastY.toInt() + b.height / 5) else b.height
+        val fx0=(b.width*focusLeft).toInt().coerceIn(0,b.width-1)
+        val fx1=(b.width*focusRight).toInt().coerceIn(fx0+1,b.width)
+        val fy0=(b.height*focusTop).toInt().coerceIn(0,b.height-1)
+        val fy1=(b.height*focusBottom).toInt().coerceIn(fy0+1,b.height)
+        val xStart=if(local)max(fx0,lastX.toInt()-b.width/5)else fx0
+        val xEnd=if(local)min(fx1,lastX.toInt()+b.width/5)else fx1
+        val yStart=if(local)max(fy0,lastY.toInt()-b.height/5)else fy0
+        val yEnd=if(local)min(fy1,lastY.toInt()+b.height/5)else fy1
         for (y in yStart until yEnd step step) for (x in xStart until xEnd step step) {
             val c = b.getPixel(x, y)
             val r = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
@@ -179,7 +191,7 @@ class UltraScanEngine {
         if (!found && local) {
             // Fast local tracking gets a global fallback on loss, preserving plane detection.
             sx = 0.0; sy = 0.0; n = 0
-            for (y0 in 0 until b.height step 10) for (x0 in 0 until b.width step 10) {
+            for (y0 in fy0 until fy1 step 10) for (x0 in fx0 until fx1 step 10) {
                 val c = b.getPixel(x0, y0)
                 val r = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
                 if (r > 170 && r > g * 1.25 && r > bl * 1.25) { sx += x0; sy += y0; n++ }
