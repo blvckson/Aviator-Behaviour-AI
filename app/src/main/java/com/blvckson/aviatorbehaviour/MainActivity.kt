@@ -52,6 +52,10 @@ class MainActivity: Activity() {
                         showStoredBehaviours(true)
                         true
                     }
+                    R.id.menu_analyser -> {
+                        showEndAnalyser()
+                        true
+                    }
                     R.id.menu_clear -> {
                         confirmClear()
                         true
@@ -103,6 +107,37 @@ class MainActivity: Activity() {
             .show()
     }
 
+    private fun showEndAnalyser() {
+        val records = database.latest(200)
+        if (records.isEmpty()) {
+            AlertDialog.Builder(this).setTitle("END-OF-ROUND BEHAVIOUR ANALYSER")
+                .setMessage("The analyser needs completed stored rounds first.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val a = BehaviourAnalyser().analyse(records)
+        val msg = StringBuilder()
+            .append("Rounds analysed: ").append(a.rounds).append("\n\n")
+            .append("OVERALL ENDING DIFFERENCE: ").append(pct(a.endingDifferenceScore)).append("\n")
+            .append("Compares the final pre-fly-away window with the rest of each stored round.\n\n")
+            .append("SIMILARITY\nRound average: ").append(pct(a.averageSimilarity))
+            .append("\nPre-fly-away: ").append(pct(a.averagePreFlySimilarity))
+            .append("\nChange: ").append(signed(a.similarityRise)).append("\n\n")
+            .append("VISUAL TRANSITION\nPre-fly-away: ").append(pct(a.averagePreFlyVisualChange))
+            .append("\nChange: ").append(signed(a.visualRise)).append("\n\n")
+            .append("PLANE BEHAVIOUR\nPre-fly-away motion: ").append(number(a.averagePreFlyPlaneMotion))
+            .append("\nChange: ").append(signed(a.planeMotionRise)).append("\n\n")
+            .append("ULTRAWATCH\nPre-fly-away: ").append(pct(a.averagePreFlyUltraWatch))
+            .append("\nChange: ").append(signed(a.ultraWatchRise)).append("\n\n")
+            .append("STRONGEST STORED ENDING: Round ").append(a.strongestRound).append("\n\n")
+            .append("FOCUS: plane disappearance + visual transition are the current stored end markers.\n")
+            .append("The score describes observed similarity, not a guaranteed outcome.")
+        AlertDialog.Builder(this).setTitle("END-OF-ROUND ANALYSER")
+            .setMessage(msg.toString()).setPositiveButton("CLOSE", null).show()
+    }
+
+    private fun signed(value: Double): String =
+        (if (value >= 0) "+" else "") + "%.1f".format(Locale.US, value) + " pts"
     private fun confirmClear() {
         AlertDialog.Builder(this)
             .setTitle("Clear behaviour storage?")
