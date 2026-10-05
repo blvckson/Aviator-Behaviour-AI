@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.MenuInflater
 import android.widget.*
+import android.view.MenuInflater
+import android.view.MenuItem
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -156,7 +158,35 @@ class MainActivity: Activity() {
     private fun pct(value: Double): String = "%.0f%%".format(Locale.US, value.coerceIn(0.0, 100.0))
     private fun number(value: Double): String = "%.1f".format(Locale.US, value)
 
-    override fun onActivityResult(rc: Int, result: Int, data: Intent?) {
+    private fun showBehaviourMenu(anchor:android.view.View){
+  val popup=PopupMenu(this,anchor)
+  MenuInflater(this).inflate(R.menu.behaviour_menu,popup.menu)
+  popup.setOnMenuItemClickListener{item:MenuItem->
+   when(item.itemId){
+    R.id.menu_all_behaviour->{showStored(false);true}
+    R.id.menu_pre_fly->{showStored(true);true}
+    R.id.menu_analyser->{showAnalysis();true}
+    R.id.menu_clear->{BehaviourDatabase(this).clearAll();status.text="Behaviour storage cleared.";true}
+    else->false
+   }
+  }
+  popup.show()
+ }
+ private fun showStored(preOnly:Boolean){
+  val rows=if(preOnly)BehaviourDatabase(this).latestPreFlyAway(40)else BehaviourDatabase(this).latest(40)
+  val text=if(rows.isEmpty())"No stored behaviour rounds yet." else rows.joinToString("\n\n"){r->
+   "Round "+r.round+": samples="+r.similaritySamples+"\npre-fly similarity="+String.format("%.1f",r.preFlyAwayMaxSimilarity)+"  visual="+String.format("%.3f",r.preFlyAwayMaxVisualChange)+"  plane="+String.format("%.1f",r.preFlyAwayMaxPlaneMotion)+"  UltraWatch="+String.format("%.1f",r.preFlyAwayMaxUltraWatch)+"\nmarkers="+r.endingMarkers
+  }
+  AlertDialog.Builder(this).setTitle(if(preOnly)"Pre-Fly-Away Focus" else "Stored Round Behaviour").setMessage(text).setPositiveButton("OK",null).show()
+ }
+ private fun showAnalysis(){
+  val a=BehaviourAnalyser().analyse(BehaviourDatabase(this).latest(80))
+  val msg=if(a.rounds==0)"No stored rounds yet. Run UltraScan through several completed rounds first." else
+   "Rounds analysed: "+a.rounds+"\nEnd-behaviour difference: "+String.format("%.1f",a.endingDifferenceScore)+"%\nHistorical sequence agreement: "+String.format("%.1f",a.sequenceAgreement)+"%\nRounds with ending markers: "+String.format("%.1f",a.markerAgreement)+"%\nFirst change phase: "+String.format("%.0f",a.firstChangePhase*100)+"% of round\nStrongest change phase: "+String.format("%.0f",a.endingChangePhase*100)+"% of round\nSimilarity rise: "+String.format("%.1f",a.similarityRise)+"\nVisual rise: "+String.format("%.3f",a.visualRise)+"\nPlane behaviour rise: "+String.format("%.1f",a.planeMotionRise)+"\nUltraWatch rise: "+String.format("%.1f",a.ultraWatchRise)+"\nStrongest stored ending: round "+a.strongestRound+"\n\nHistorical visual-behaviour similarity only; not a guaranteed outcome prediction."
+  AlertDialog.Builder(this).setTitle("Super End-Behaviour Analyser").setMessage(msg).setPositiveButton("OK",null).show()
+ }
+
+ override fun onActivityResult(rc: Int, result: Int, data: Intent?) {
         super.onActivityResult(rc, result, data)
         if (rc == requestCode && data != null) {
             val i = Intent(this, ScreenMonitorService::class.java).apply {
