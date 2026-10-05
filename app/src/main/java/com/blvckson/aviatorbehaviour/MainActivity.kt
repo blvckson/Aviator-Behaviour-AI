@@ -44,7 +44,7 @@ class MainActivity: Activity() {
 
     private fun showStoredBehaviours(preFlyOnly:Boolean){
         val records=if(preFlyOnly)database.latestPreFlyAway()else database.latest()
-        val title=if(preFlyOnly)"PRE-FLY-AWAY FOCUS"else "STORED ROUND BEHAVIOUR"
+        val title=if(preFlyOnly) "PRE-FLY-AWAY FOCUS"else "STORED ROUND BEHAVIOUR"
         if(records.isEmpty()){AlertDialog.Builder(this).setTitle(title).setMessage("No completed round behaviour has been stored yet.").setPositiveButton("OK",null).show();return}
         val overall=BehaviourAnalyser().analyse(database.latest(200)).overallPreFlySimilarity
         val text=StringBuilder()
@@ -55,7 +55,7 @@ class MainActivity: Activity() {
                 .append("Similarity: ").append(pct(r.maxSimilarity)).append("   Avg: ").append(pct(r.avgSimilarity)).append("\n")
                 .append("Plane motion: ").append(number(r.maxPlaneMotion)).append("   Visual change: ").append(pct(r.maxVisualChange)).append("\n")
                 .append("UltraWatch: ").append(pct(r.maxUltraWatch)).append("\n")
-                .append("ENDING MULTIPLIER: ").append(if(r.endingMultiplier.isBlank())"Not captured" else r.endingMultiplier).append("\n")
+                .append("ENDING MULTIPLIER: ").append(if(r.endingMultiplier.isBlank()) "Not captured" else r.endingMultiplier).append("\n")
             if(preFlyOnly)text.append("◆ PRE-FLY-AWAY AREA\n")
                 .append("Similarity: ").append(pct(r.preFlyAwayMaxSimilarity)).append("   Visual: ").append(pct(r.preFlyAwayMaxVisualChange)).append("\n")
                 .append("Plane motion: ").append(number(r.preFlyAwayMaxPlaneMotion)).append("   UltraWatch: ").append(pct(r.preFlyAwayMaxUltraWatch)).append("\n")
@@ -107,12 +107,12 @@ class MainActivity: Activity() {
     }
     private fun showStored(preOnly:Boolean){
         val rows=if(preOnly)BehaviourDatabase(this).latestPreFlyAway(40)else BehaviourDatabase(this).latest(40)
-        val text=if(rows.isEmpty())"No stored behaviour rounds yet."else rows.joinToString("\n\n"){r->"Round "+r.round+": samples="+r.similaritySamples+"\npre-fly similarity="+String.format("%.1f",r.preFlyAwayMaxSimilarity)+"  visual="+String.format("%.3f",r.preFlyAwayMaxVisualChange)+"  plane="+String.format("%.1f",r.preFlyAwayMaxPlaneMotion)+"  UltraWatch="+String.format("%.1f",r.preFlyAwayMaxUltraWatch)+"\nmarkers="+r.endingMarkers+"\nending multiplier="+if(r.endingMultiplier.isBlank())"not captured"else r.endingMultiplier}
-        AlertDialog.Builder(this).setTitle(if(preOnly)"Pre-Fly-Away Focus"else "Stored Round Behaviour").setMessage(text).setPositiveButton("OK",null).show()
+        val text=if(rows.isEmpty()) "No stored behaviour rounds yet."else rows.joinToString("\n\n"){r->"Round "+r.round+": samples="+r.similaritySamples+"\npre-fly similarity="+String.format("%.1f",r.preFlyAwayMaxSimilarity)+"  visual="+String.format("%.3f",r.preFlyAwayMaxVisualChange)+"  plane="+String.format("%.1f",r.preFlyAwayMaxPlaneMotion)+"  UltraWatch="+String.format("%.1f",r.preFlyAwayMaxUltraWatch)+"\nmarkers="+r.endingMarkers+"\nending multiplier="+if(r.endingMultiplier.isBlank()) "not captured"else r.endingMultiplier}
+        AlertDialog.Builder(this).setTitle(if(preOnly) "Pre-Fly-Away Focus"else "Stored Round Behaviour").setMessage(text).setPositiveButton("OK",null).show()
     }
     private fun showAnalysis(){
         val a=BehaviourAnalyser().analyse(BehaviourDatabase(this).latest(80))
-        val msg=if(a.rounds==0)"No stored rounds yet. Run UltraScan through several completed rounds first."else
+        val msg=if(a.rounds==0) "No stored rounds yet. Run UltraScan through several completed rounds first."else
             "Rounds analysed: "+a.rounds+"\nOverall pre-fly-away similarity: "+String.format("%.1f",a.overallPreFlySimilarity)+"%\nEnd-behaviour difference: "+String.format("%.1f",a.endingDifferenceScore)+"%\nHistorical sequence agreement: "+String.format("%.1f",a.sequenceAgreement)+"%\nRounds with ending markers: "+String.format("%.1f",a.markerAgreement)+"%\nFirst change phase: "+String.format("%.0f",a.firstChangePhase*100)+"% of round\nStrongest change phase: "+String.format("%.0f",a.endingChangePhase*100)+"% of round\nSimilarity rise: "+String.format("%.1f",a.similarityRise)+"\nVisual rise: "+String.format("%.1f",a.visualRise)+"\nPlane behaviour rise: "+String.format("%.1f",a.planeMotionRise)+"\nUltraWatch rise: "+String.format("%.1f",a.ultraWatchRise)+"\nStrongest stored ending: round "+a.strongestRound+"\n\nSpeed and red-multiplier state are excluded from the overall similarity; movement/trajectory remains included."
         AlertDialog.Builder(this).setTitle("Super End-Behaviour Analyser").setMessage(msg).setPositiveButton("OK",null).show()
     }
