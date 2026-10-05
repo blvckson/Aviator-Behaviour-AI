@@ -7,6 +7,9 @@
         android:id="@+id/menu_pre_fly"
         android:title="Pre-Fly-Away Focus" />
     <item
+        android:id="@+id/menu_analyser"
+        android:title="End-Of-Round Behaviour Analyser" />
+    <item
         android:id="@+id/menu_clear"
         android:title="Clear Behaviour Storage" />
 </menu>
