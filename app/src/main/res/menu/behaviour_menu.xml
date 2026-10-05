@@ -10,6 +10,9 @@
         android:id="@+id/menu_analyser"
         android:title="End-Of-Round Behaviour Analyser" />
     <item
+        android:id="@+id/menu_statement"
+        android:title="Statement" />
+    <item
         android:id="@+id/menu_clear"
         android:title="Clear Behaviour Storage" />
 </menu>
