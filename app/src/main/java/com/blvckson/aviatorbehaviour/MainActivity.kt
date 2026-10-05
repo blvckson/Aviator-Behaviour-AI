@@ -130,8 +130,11 @@ class MainActivity: Activity() {
             .append("ULTRAWATCH\nPre-fly-away: ").append(pct(a.averagePreFlyUltraWatch))
             .append("\nChange: ").append(signed(a.ultraWatchRise)).append("\n\n")
             .append("STRONGEST STORED ENDING: Round ").append(a.strongestRound).append("\n\n")
-            .append("FOCUS: plane disappearance + visual transition are the current stored end markers.\n")
-            .append("The score describes observed similarity, not a guaranteed outcome.")
+            .append("Historical sequence agreement: ").append(pct(a.sequenceAgreement)).append("\n")
+            .append("Rounds with end markers: ").append(pct(a.markerAgreement)).append("\n")
+            .append("First detected change phase: ").append(pct(a.firstChangePhase*100.0)).append("\n")
+            .append("Strongest change phase: ").append(pct(a.endingChangePhase*100.0)).append("\n\n")
+            .append("The analyser compares late behaviour against each round’s earlier baseline, then checks repeated transitions across stored rounds. Observed behaviour only; no guaranteed outcome.")
         AlertDialog.Builder(this).setTitle("END-OF-ROUND ANALYSER")
             .setMessage(msg.toString()).setPositiveButton("CLOSE", null).show()
     }
