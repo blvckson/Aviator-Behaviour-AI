@@ -59,6 +59,8 @@ class UltraScanEngine {
 
     fun currentSimilarity(): Double = similarity
 
+    fun lastPlaneSeenAt(): Long = lastT
+
     private fun sampleChange(a: Bitmap, b: Bitmap): Double {
         val sx = 10; val sy = 10
         var total = 0L; var n = 0
