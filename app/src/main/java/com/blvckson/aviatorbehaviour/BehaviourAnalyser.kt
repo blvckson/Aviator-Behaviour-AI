@@ -77,9 +77,25 @@ class BehaviourAnalyser {
     }
     private fun parse(raw:String):List<S>{
         if(raw.isBlank()) return emptyList()
-        return raw.split(';').mapNotNull{p->val a=p.split(',');if(a.size>=7)S(a[0].toDoubleOrNull()?:0.0,a[1].toDoubleOrNull()?:0.0,a[2].toDoubleOrNull()?:0.0,a[3].toDoubleOrNull()?:0.0,a[4].toDoubleOrNull()?:0.0,a[5].toDoubleOrNull()?:0.0,a[6].toDoubleOrNull()?:0.0,a.getOrNull(7)?.toDoubleOrNull()?:0.0,a.getOrNull(8)?.toDoubleOrNull()?:0.0)else null}
+        return raw.split(';').mapNotNull { p ->
+            val a=p.split(',')
+            if(a.size>=7) S(
+                a[0].toDoubleOrNull()?:0.0,
+                a[1].toDoubleOrNull()?:0.0,
+                a[2].toDoubleOrNull()?:0.0,
+                a[3].toDoubleOrNull()?:0.0,
+                a[4].toDoubleOrNull()?:0.0,
+                a[5].toDoubleOrNull()?:0.0,
+                a[6].toDoubleOrNull()?:0.0,
+                a.getOrNull(7)?.toDoubleOrNull()?:0.0,
+                a.getOrNull(8)?.toDoubleOrNull()?:0.0
+            ) else null
+        }
     }
-    private fun avgVector(x:List<S>):S{if(x.isEmpty())return S(0.0,0.0,0.0,0.0,0.0,0.0,0.0);return S(x.map{it.sim}.average(),x.map{it.visual}.average(),x.map{it.plane}.average(),x.map{it.ultra}.average(),x.map{it.red}.average(),x.map{it.stable}.average(),0.0,x.map{it.x}.average(),x.map{it.y}.average())}
+    private fun avgVector(x:List<S>):S{
+        if(x.isEmpty()) return S(0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+        return S(x.map{it.sim}.average(),x.map{it.visual}.average(),x.map{it.plane}.average(),x.map{it.ultra}.average(),x.map{it.red}.average(),x.map{it.stable}.average(),0.0,x.map{it.x}.average(),x.map{it.y}.average())
+    }
     private fun distance(a:S,b:S):Double{fun d(x:Double,y:Double,scale:Double)=min(1.0,abs(x-y)/max(scale,0.0001));return d(a.sim,b.sim,100.0)*.22+d(a.visual,b.visual,100.0)*.18+d(a.plane,b.plane,80.0)*.18+d(a.ultra,b.ultra,100.0)*.18+d(a.red,b.red,10.0)*.12+d(a.stable,b.stable,1.0)*.12}
     private fun variance(x:List<Double>):Double{if(x.size<2)return 0.0;val m=x.average();return x.map{(it-m)*(it-m)}.average()}
     private fun weightedDifference(sim:Double,sb:Double,visual:Double,vb:Double,plane:Double,pb:Double,ultra:Double,ub:Double):Double{fun rel(d:Double,b:Double)=if(b<=.0001)min(1.0,abs(d))else min(1.0,abs(d)/max(b,1.0));return(rel(sim,sb)*.28+rel(visual,vb)*.22+rel(plane,pb)*.18+rel(ultra,ub)*.22)*100.0}
