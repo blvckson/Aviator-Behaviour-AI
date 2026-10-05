@@ -165,7 +165,7 @@ class ScreenMonitorService : Service() {
         }else publishStatus(engine.currentSimilarity())
     }
 
-    private fun publishStatus(score:Double){uiHandler.post{overlay?.text=if(score>0.45)"BEHAVIOUR: %.0f%% MATCH".format(score*100.0)else"BEHAVIOUR: MONITORING"}}
+    private fun publishStatus(score:Double){uiHandler.post{overlay?.text=if(score>0.45)"BEHAVIOUR: %.0f%% MATCH".format(score*100.0)else "BEHAVIOUR: MONITORING"}}
 
     private fun showOverlay(){
         windowManager=getSystemService(WINDOW_SERVICE) as WindowManager
