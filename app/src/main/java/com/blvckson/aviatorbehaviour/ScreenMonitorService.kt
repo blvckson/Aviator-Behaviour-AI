@@ -75,7 +75,7 @@ class ScreenMonitorService : Service() {
     private fun startCapture() {
         if(reader!=null)return
         val m=resources.displayMetrics; val w=m.widthPixels; val h=m.heightPixels
-        reader=ImageReader.newInstance(w,h,PixelFormat.RGBA_8888,2)
+        reader=ImageReader.newInstance(w,h,PixelFormat.RGBA_8888,3)
         reader!!.setOnImageAvailableListener({r->
             val image=r.acquireLatestImage()?:return@setOnImageAvailableListener
             try{
