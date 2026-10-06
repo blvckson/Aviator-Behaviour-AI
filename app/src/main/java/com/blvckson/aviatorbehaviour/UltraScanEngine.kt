@@ -233,7 +233,7 @@ class UltraScanEngine {
         var sx=0.0; var sy=0.0; var weighted=0.0
         for(y in ys until ye step step) for(x in xs until xe step step){
             val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
-            val red=(r-g*1.30).coerceAtLeast(0).toDouble()/255.0
+            val red=(r.toDouble()-g.toDouble()*1.30).coerceAtLeast(0.0)/255.0
             val bright=((r+g+bl)/3.0)/255.0
             if(r.toDouble()>155.0 && r.toDouble()>g.toDouble()*1.18 && r.toDouble()>bl.toDouble()*1.18){
                 val near=redNeighbourSupport(b,x,y)
