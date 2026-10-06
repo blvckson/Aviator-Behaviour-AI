@@ -86,7 +86,7 @@ class ScreenMonitorService : Service() {
                 val frame=if(paddedWidth==w)bmp else Bitmap.createBitmap(bmp,0,0,w,h)
                 val now=System.currentTimeMillis()
                 val events=engine.inspect(frame,now)
-                if(roundActive && (now-lastMultiplierReadAt>=180L || events.any{it.type=="ENDING_RED_VISUAL"||it.type=="ENDING_STATE_CLUSTER"||it.type=="PLANE_DISAPPEAR"})){
+                if(roundActive && (now-lastMultiplierReadAt>=80L || events.any{it.type=="ENDING_RED_VISUAL"||it.type=="ENDING_STATE_CLUSTER"||it.type=="PLANE_DISAPPEAR"||it.type=="ULTRAWATCH"||it.type=="PRE_FLY_AWAY_MATCH"})){
                     lastMultiplierReadAt=now
                     multiplierReader.inspect(frame){value->
                         if(roundActive) currentEndingMultiplier=value
@@ -128,7 +128,7 @@ class ScreenMonitorService : Service() {
         recentSamples.addLast(sample)
         while(recentSamples.isNotEmpty()&&now-recentSamples.peekFirst().time>preFlyAwayWindowMs)recentSamples.removeFirst()
         if(roundActive&&(lastStoredSampleAt==0L||now-lastStoredSampleAt>=sampleIntervalMs)){sequenceSamples.add(sample);lastStoredSampleAt=now}
-        if(events.any{it.type=="PLANE_DISAPPEAR"}&&roundActive){
+        if(events.any{it.type=="PLANE_DISAPPEAR"||it.type=="ENDING_STATE_CLUSTER"}&&roundActive){
             for(x in recentSamples){preMaxSimilarity=max(preMaxSimilarity,x.similarity);preMaxVisualChange=max(preMaxVisualChange,x.visualChange);preMaxPlaneMotion=max(preMaxPlaneMotion,x.planeMotion);preMaxUltraWatch=max(preMaxUltraWatch,x.ultraWatch)}
             pendingEndingRound=roundNumber; pendingEndingUntil=now+900L
             saveRound(now); roundActive=false; recentSamples.clear(); sequenceSamples.clear(); endingMarkers.clear(); lastStoredSampleAt=0L
