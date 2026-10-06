@@ -201,7 +201,7 @@ class UltraScanEngine {
             val y = y0 + j * (y1 - y0 - 1) / (sy - 1)
             val c = b.getPixel(x, y)
             val rr = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
-            if (rr > 150 && rr > g * 1.35 && rr > bl * 1.35) red++
+            if (rr.toDouble() > 150.0 && rr.toDouble() > g.toDouble() * 1.35 && rr.toDouble() > bl.toDouble() * 1.35) red++
             n++
         }
         return red.toDouble() / n
@@ -214,7 +214,7 @@ class UltraScanEngine {
             val py=(y+dy).coerceIn(0,b.height-1)
             val cc=b.getPixel(px,py)
             val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
-            if(r.toDouble()>145.0 && r.toDouble()>g*1.16 && r.toDouble()>bl*1.16) hit++
+            if(r.toDouble()>145.0 && r.toDouble()>g.toDouble()*1.16 && r.toDouble()>bl.toDouble()*1.16) hit++
             total++
         }
         return hit.toDouble()/max(1,total)
@@ -235,7 +235,7 @@ class UltraScanEngine {
             val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
             val red=(r-g*1.30).coerceAtLeast(0).toDouble()/255.0
             val bright=((r+g+bl)/3.0)/255.0
-            if(r.toDouble()>155.0 && r.toDouble()>g*1.18 && r.toDouble()>bl*1.18){
+            if(r.toDouble()>155.0 && r.toDouble()>g.toDouble()*1.18 && r.toDouble()>bl.toDouble()*1.18){
                 val near=redNeighbourSupport(b,x,y)
                 val w=(0.35+red*0.85+bright*0.20)*(0.65+near*0.75)
                 sx+=x*w; sy+=y*w; weighted+=w
@@ -246,9 +246,9 @@ class UltraScanEngine {
             sx=0.0; sy=0.0; weighted=0.0
             for(y in y0 until y1 step 7) for(x in x0 until x1 step 7){
                 val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
-                if(r>155 && r>g*1.18 && r>bl*1.18){
+                if(r.toDouble()>155.0 && r.toDouble()>g.toDouble()*1.18 && r.toDouble()>bl.toDouble()*1.18){
                     val near=redNeighbourSupport(b,x,y)
-                    val w=(0.8+(r-g).coerceAtLeast(0)/255.0)*(0.7+near*0.6)
+                    val w=(0.8+(r.toDouble()-g.toDouble()).coerceAtLeast(0.0)/255.0)*(0.7+near*0.6)
                     sx+=x*w;sy+=y*w;weighted+=w
                 }
             }
