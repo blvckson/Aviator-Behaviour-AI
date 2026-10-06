@@ -20,23 +20,29 @@ class UltraScanEngine {
     private var similarityHold = 0
     private var scanFrame = 0
     private var lastPlaneScanFrame = -1
+    private var lostPlaneFrames = 0
+    private var lastChange = 0.0
+    private var changeVelocity = 0.0
+    private var transitionEvidence = 0.0
 
     fun inspect(frame: Bitmap, now: Long): List<VisualEvent> {
         val out = ArrayList<VisualEvent>(8)
         scanFrame++
         val p = previous
         if (p != null && p.width == frame.width && p.height == frame.height) {
-            val change = sampleChange(p, frame)
+            val change = sampleChangeFocused(p, frame)
+            changeVelocity = changeVelocity * 0.65 + (change - lastChange) * 0.35
+            lastChange = change
             if (change > 0.018) out.add(VisualEvent(now, "FRAME_CHANGE", change, "whole-screen appearance/graphics change"))
 
-            val graphics = graphicsChange(p, frame)
+            val graphics = graphicsChangeFocused(p, frame)
             if (graphics > 0.012) out.add(VisualEvent(now, "GRAPHICS_APPEARANCE", graphics * 100.0, "whole-screen graphics/appearance signature change"))
 
-            val centerChange = roiChange(p, frame, 0.18, 0.18, 0.82, 0.62)
+            val centerChange = roiChange(p, frame, focusLeft, focusTop, focusRight, focusBottom)
             if (centerChange > 0.012)
                 out.add(VisualEvent(now, "MULTIPLIER_VISUAL_CHANGE", centerChange, "central multiplier-area visual change"))
 
-            val redDensity = redDensity(frame, 0.15, 0.10, 0.90, 0.72)
+            val redDensity = redDensity(frame, focusLeft, focusTop, focusRight, focusBottom)
             if (redDensity > 0.018)
                 out.add(VisualEvent(now, "ENDING_RED_VISUAL", redDensity * 100.0, "red ending-state visual detected"))
 
@@ -53,13 +59,15 @@ class UltraScanEngine {
                 out.add(VisualEvent(now, "PLANE_DISAPPEAR", 1.0, "possible round transition"))
 
             val movementScore = movementConsistency
+            val transitionVelocity = min(1.0, abs(changeVelocity) / 0.035)
+            transitionEvidence = transitionEvidence * 0.78 + (transitionVelocity * 0.55 + min(1.0, change / 0.14) * 0.45) * 0.22
             val appearanceScore = min(1.0, (change * 0.55 + graphics * 0.45) / 0.16)
             val transitionScore = min(1.0, change / 0.22)
             val multiplierVisualScore = min(1.0, centerChange / 0.12)
             // Similarity uses appearance/graphics, movement behaviour and multiplier-area
             // visual behaviour. Raw multiplier figures, speed and acceleration are excluded.
-            val candidate = movementScore * 0.30 + appearanceScore * 0.25 +
-                transitionScore * 0.20 + multiplierVisualScore * 0.25
+            val candidate = movementScore * 0.30 + appearanceScore * 0.22 +
+                transitionScore * 0.20 + multiplierVisualScore * 0.18 + transitionEvidence * 0.10
             similarity = similarity * 0.72 + candidate * 0.28
             if (similarity > 0.52) similarityHold++ else similarityHold = max(0, similarityHold - 1)
 
@@ -77,11 +85,11 @@ class UltraScanEngine {
                 out.add(VisualEvent(now, "PRE_FLY_AWAY_MATCH", similarity * 100.0,
                     "behaviour similarity strengthening before transition"))
 
-            if (change > 0.16 || (!plane.found && !lastX.isNaN()) || (redDensity > 0.06 && stable))
+            if (change > 0.12 || transitionEvidence > 0.58 || (!plane.found && lostPlaneFrames >= 1) || (redDensity > 0.045 && stable))
                 out.add(VisualEvent(now, "ULTRAWATCH", max(change, similarity),
                     "sudden transition / possible fly-away"))
 
-            if (redDensity > 0.06 && stable)
+            if (redDensity > 0.045 && stable)
                 out.add(VisualEvent(now, "ENDING_STATE_CLUSTER", redDensity * 100.0,
                     "red + visually stable multiplier area; possible FLEW AWAY state"))
         }
@@ -91,6 +99,28 @@ class UltraScanEngine {
 
     fun currentSimilarity(): Double = similarity
     fun lastPlaneSeenAt(): Long = lastT
+
+    private val focusLeft = 0.08
+    private val focusTop = 0.08
+    private val focusRight = 0.92
+    private val focusBottom = 0.72
+
+    private fun graphicsChangeFocused(a: Bitmap, b: Bitmap): Double {
+        val x0=(b.width*focusLeft).toInt(); val x1=(b.width*focusRight).toInt()
+        val y0=(b.height*focusTop).toInt(); val y1=(b.height*focusBottom).toInt()
+        val sx=14; val sy=11
+        var total=0.0; var n=0
+        for(j in 0 until sy) for(i in 0 until sx){
+            val x=x0+i*(x1-x0-1)/max(1,sx-1); val y=y0+j*(y1-y0-1)/max(1,sy-1)
+            val ca=a.getPixel(x,y); val cb=b.getPixel(x,y)
+            val ar=(ca shr 16) and 255; val ag=(ca shr 8) and 255; val ab=ca and 255
+            val br=(cb shr 16) and 255; val bg=(cb shr 8) and 255; val bb=cb and 255
+            val la=(0.299*ar+0.587*ag+0.114*ab)/255.0; val lb=(0.299*br+0.587*bg+0.114*bb)/255.0
+            val caa=((ar-ag).absoluteValue+(ag-ab).absoluteValue)/510.0; val cbb=((br-bg).absoluteValue+(bg-bb).absoluteValue)/510.0
+            total+=abs(la-lb)*0.62+abs(caa-cbb)*0.38; n++
+        }
+        return total/max(1,n)
+    }
 
     private fun graphicsChange(a: Bitmap, b: Bitmap): Double {
         val sx = 12; val sy = 12
@@ -109,6 +139,21 @@ class UltraScanEngine {
             n++
         }
         return total / max(1, n)
+    }
+
+    private fun sampleChangeFocused(a: Bitmap, b: Bitmap): Double {
+        val x0=(b.width*focusLeft).toInt(); val x1=(b.width*focusRight).toInt()
+        val y0=(b.height*focusTop).toInt(); val y1=(b.height*focusBottom).toInt()
+        val sx=13; val sy=9
+        var total=0L; var n=0
+        for(j in 0 until sy) for(i in 0 until sx){
+            val x=x0+i*(x1-x0-1)/max(1,sx-1); val y=y0+j*(y1-y0-1)/max(1,sy-1)
+            val ca=a.getPixel(x,y); val cb=b.getPixel(x,y)
+            total+=abs(((ca shr 16) and 255)-((cb shr 16) and 255)).toLong()
+            total+=abs(((ca shr 8) and 255)-((cb shr 8) and 255)).toLong()
+            total+=abs((ca and 255)-(cb and 255)).toLong(); n+=3
+        }
+        return total.toDouble()/max(1,n*255)
     }
 
     private fun sampleChange(a: Bitmap, b: Bitmap): Double {
@@ -163,61 +208,52 @@ class UltraScanEngine {
     }
 
     private fun trackPlane(b: Bitmap, t: Long, frameNo: Int): PlaneState {
-        var sx = 0.0; var sy = 0.0; var n = 0
-        val step = if (!lastX.isNaN() && frameNo - lastPlaneScanFrame <= 2) 10 else 8
-        val local = !lastX.isNaN() && frameNo - lastPlaneScanFrame <= 2
-        val xStart=if(local)max(0,lastX.toInt()-b.width/5)else 0
-        val xEnd=if(local)min(b.width,lastX.toInt()+b.width/5)else b.width
-        val yStart=if(local)max(0,lastY.toInt()-b.height/5)else 0
-        val yEnd=if(local)min(b.height,lastY.toInt()+b.height/5)else b.height
-        for (y in yStart until yEnd step step) for (x in xStart until xEnd step step) {
-            val c = b.getPixel(x, y)
-            val r = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
-            if (r > 170 && r > g * 1.25 && r > bl * 1.25) { sx += x; sy += y; n++ }
-        }
-        var found = n > 3
-        if (!found && local) {
-            // Fast local tracking gets a global fallback on loss, preserving plane detection.
-            sx = 0.0; sy = 0.0; n = 0
-            for (y0 in 0 until b.height step 10) for (x0 in 0 until b.width step 10) {
-                val c = b.getPixel(x0, y0)
-                val r = (c shr 16) and 255; val g = (c shr 8) and 255; val bl = c and 255
-                if (r > 170 && r > g * 1.25 && r > bl * 1.25) { sx += x0; sy += y0; n++ }
-            }
-            found = n > 3
-        }
-        val x = if (found) (sx / n).toFloat() else Float.NaN
-        val y = if (found) (sy / n).toFloat() else Float.NaN
-        var vx = 0f; var vy = 0f; var acc = 0f
-        if (found && !lastX.isNaN() && lastT > 0) {
-            val dt = ((t - lastT).coerceAtLeast(1)) / 1000f
-            vx = (x - lastX) / dt; vy = (y - lastY) / dt
-            val s = sqrt(vx * vx + vy * vy)
-            acc = (s - lastV) / dt
-            lastV = s
-            val dx = x - lastX
-            val dy = y - lastY
-            val norm = sqrt(dx * dx + dy * dy)
-            if (norm > 0.5f) {
-                val ndx = dx / norm
-                val ndy = dy / norm
-                if (lastDx != 0f || lastDy != 0f) {
-                    val directionalAgreement = ((ndx * lastDx + ndy * lastDy) + 1f) * 0.5f
-                    movementConsistency = movementConsistency * 0.65 + directionalAgreement * 0.35
-                } else movementConsistency = 0.5
-                lastDx = ndx
-                lastDy = ndy
+        val local = !lastX.isNaN() && frameNo - lastPlaneScanFrame <= 3
+        val step = if(local) 6 else 8
+        val x0=(b.width*focusLeft).toInt(); val x1=(b.width*focusRight).toInt()
+        val y0=(b.height*focusTop).toInt(); val y1=(b.height*focusBottom).toInt()
+        val px=if(local)(lastX+lastDx*max(18f,b.width*0.08f)).toInt() else (x0+x1)/2
+        val py=if(local)(lastY+lastDy*max(12f,b.height*0.05f)).toInt() else (y0+y1)/2
+        val rx=if(local)(b.width*0.23).toInt() else (x1-x0)
+        val ry=if(local)(b.height*0.20).toInt() else (y1-y0)
+        val xs=max(x0,px-rx); val xe=min(x1,px+rx); val ys=max(y0,py-ry); val ye=min(y1,py+ry)
+        var sx=0.0; var sy=0.0; var weighted=0.0
+        for(y in ys until ye step step) for(x in xs until xe step step){
+            val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
+            val red=(r-g*1.30).coerceAtLeast(0).toDouble()/255.0
+            val bright=((r+g+bl)/3.0)/255.0
+            if(r>165 && r>g*1.22 && r>bl*1.22){
+                val w=0.45+red*0.75+bright*0.25
+                sx+=x*w; sy+=y*w; weighted+=w
             }
         }
-        if (found) {
-            lastX = x; lastY = y; lastT = t; lastPlaneScanFrame = frameNo
-        } else if (!lastX.isNaN()) {
-            // End-of-round boundary: do not carry movement consistency into the next round.
-            movementConsistency = 0.0
-            lastDx = 0f
-            lastDy = 0f
-            lastV = 0f
+        var found=weighted>4.0
+        if(!found && local){
+            sx=0.0; sy=0.0; weighted=0.0
+            for(y in y0 until y1 step 7) for(x in x0 until x1 step 7){
+                val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
+                if(r>165 && r>g*1.22 && r>bl*1.22){val w=1.0+(r-g).coerceAtLeast(0)/255.0;sx+=x*w;sy+=y*w;weighted+=w}
+            }
+            found=weighted>4.0
         }
-        return PlaneState(found, x, y, vx, vy, acc)
+        if(found) lostPlaneFrames=0 else lostPlaneFrames++
+        val x=if(found)(sx/weighted).toFloat() else Float.NaN
+        val y=if(found)(sy/weighted).toFloat() else Float.NaN
+        var vx=0f; var vy=0f; var acc=0f
+        if(found && !lastX.isNaN() && lastT>0){
+            val dt=((t-lastT).coerceAtLeast(1))/1000f
+            vx=(x-lastX)/dt; vy=(y-lastY)/dt
+            val s=sqrt(vx*vx+vy*vy); acc=(s-lastV)/dt; lastV=s
+            val dx=x-lastX; val dy=y-lastY; val norm=sqrt(dx*dx+dy*dy)
+            if(norm>0.35f){
+                val ndx=dx/norm; val ndy=dy/norm
+                if(lastDx!=0f||lastDy!=0f){val agreement=((ndx*lastDx+ndy*lastDy)+1f)*0.5f; movementConsistency=movementConsistency*0.58+agreement*0.42}
+                else movementConsistency=0.5
+                lastDx=ndx; lastDy=ndy
+            }
+        }
+        if(found){lastX=x;lastY=y;lastT=t;lastPlaneScanFrame=frameNo}
+        else if(lostPlaneFrames>=2){movementConsistency*=0.35;lastDx=0f;lastDy=0f;lastV=0f}
+        return PlaneState(found,x,y,vx,vy,acc)
     }
 }
