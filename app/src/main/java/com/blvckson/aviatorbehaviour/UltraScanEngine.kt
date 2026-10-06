@@ -207,6 +207,19 @@ class UltraScanEngine {
         return red.toDouble() / n
     }
 
+    private fun redNeighbourSupport(b: Bitmap,x:Int,y:Int):Double{
+        var hit=0; var total=0
+        for(dy in -2..2) for(dx in -2..2){
+            val px=(x+dx).coerceIn(0,b.width-1)
+            val py=(y+dy).coerceIn(0,b.height-1)
+            val cc=b.getPixel(px,py)
+            val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
+            if(r>145 && r>g*1.16 && r>bl*1.16) hit++
+            total++
+        }
+        return hit.toDouble()/max(1,total)
+    }
+
     private fun trackPlane(b: Bitmap, t: Long, frameNo: Int): PlaneState {
         val local = !lastX.isNaN() && frameNo - lastPlaneScanFrame <= 3
         val step = if(local) 6 else 8
@@ -222,8 +235,9 @@ class UltraScanEngine {
             val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
             val red=(r-g*1.30).coerceAtLeast(0).toDouble()/255.0
             val bright=((r+g+bl)/3.0)/255.0
-            if(r>165 && r>g*1.22 && r>bl*1.22){
-                val w=0.45+red*0.75+bright*0.25
+            if(r>155 && r>g*1.18 && r>bl*1.18){
+                val near=redNeighbourSupport(b,x,y)
+                val w=(0.35+red*0.85+bright*0.20)*(0.65+near*0.75)
                 sx+=x*w; sy+=y*w; weighted+=w
             }
         }
@@ -232,7 +246,11 @@ class UltraScanEngine {
             sx=0.0; sy=0.0; weighted=0.0
             for(y in y0 until y1 step 7) for(x in x0 until x1 step 7){
                 val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
-                if(r>165 && r>g*1.22 && r>bl*1.22){val w=1.0+(r-g).coerceAtLeast(0)/255.0;sx+=x*w;sy+=y*w;weighted+=w}
+                if(r>155 && r>g*1.18 && r>bl*1.18){
+                    val near=redNeighbourSupport(b,x,y)
+                    val w=(0.8+(r-g).coerceAtLeast(0)/255.0)*(0.7+near*0.6)
+                    sx+=x*w;sy+=y*w;weighted+=w
+                }
             }
             found=weighted>4.0
         }
