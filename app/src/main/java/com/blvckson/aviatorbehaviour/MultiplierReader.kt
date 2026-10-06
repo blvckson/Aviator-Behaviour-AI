@@ -7,6 +7,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.util.Locale
 import java.util.regex.Pattern
+import kotlin.math.abs
 import kotlin.math.max
 
 class MultiplierReader {
@@ -14,6 +15,8 @@ class MultiplierReader {
     @Volatile private var busy = false
     @Volatile var lastReading: String = ""
         private set
+    private var lastValue = Double.NaN
+    private var lastAcceptedAt = 0L
 
     fun inspect(frame: Bitmap, onReading: (String) -> Unit) {
         if (busy || frame.width < 40 || frame.height < 40) return
@@ -26,25 +29,42 @@ class MultiplierReader {
         val pixels=IntArray(w*h); crop.getPixels(pixels,0,w,0,0,w,h)
         for(i in pixels.indices){
             val c=pixels[i]; val r=Color.red(c); val g=Color.green(c); val b=Color.blue(c)
-            pixels[i]=if(r>90&&r>g*1.22&&r>b*1.22)Color.WHITE else Color.BLACK
+            val dominance=r-max(g,b)
+            val bright=(r+g+b)/3
+            pixels[i]=if(r>105&&dominance>28&&bright>70)Color.WHITE else Color.BLACK
         }
         redOnly.setPixels(pixels,0,w,0,0,w,h); crop.recycle()
         recognizer.process(InputImage.fromBitmap(redOnly,0))
             .addOnSuccessListener{ text->
-                val candidate=extract(text.text)
-                if(candidate.isNotEmpty()){lastReading=candidate;onReading(candidate)}
+                val parsed=extractValue(text.text)
+                val now=System.currentTimeMillis()
+                if(parsed!=null && accept(parsed,now)){
+                    val candidate="%.2fx".format(Locale.US,parsed)
+                    lastReading=candidate; onReading(candidate)
+                }
             }
             .addOnCompleteListener{redOnly.recycle();busy=false}
     }
 
-    private fun extract(raw:String):String{
-        val matcher=Pattern.compile("(\\d{1,7}(?:[.,]\\d{1,4})?)\\s*[xX]?").matcher(raw.replace(',','.'))
-        var best=-1.0
+    private fun extractValue(raw:String):Double?{
+        val cleaned=raw.replace(',','.').replace('O','0').replace('o','0').replace('I','1').replace('l','1')
+        val matcher=Pattern.compile("(\\d{1,7}(?:\\.\\d{1,4})?)\\s*[xX]?").matcher(cleaned)
+        var best:Double?=null
         while(matcher.find()){
             val v=matcher.group(1)?.toDoubleOrNull()?:continue
-            if(v>=1.0&&v<=10000000.0&&v>best)best=v
+            if(v>=1.0&&v<=10000000.0 && (best==null || v>best!!)) best=v
         }
-        return if(best<0) "" else "%.2fx".format(Locale.US,best)
+        return best
+    }
+
+    private fun accept(value:Double,now:Long):Boolean{
+        if(!value.isFinite() || value<1.0 || value>10000000.0)return false
+        if(lastValue.isNaN()) { lastValue=value; lastAcceptedAt=now; return true }
+        val age=now-lastAcceptedAt
+        val jump=abs(value-lastValue)
+        if(age<220L && jump>max(25.0,lastValue*3.5))return false
+        lastValue=value; lastAcceptedAt=now
+        return true
     }
     fun close(){recognizer.close()}
 }
