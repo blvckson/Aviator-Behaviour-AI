@@ -112,15 +112,25 @@ class BehaviourAnalyser {
             val base=avgVector(samples.take(max(3,samples.size*55/100)))
             val late=samples.takeLast(max(3,samples.size*35/100))
             if(late.isEmpty()) return@mapNotNull null
-            val movement=late.map{distance(it,base)}.average()
+            val movement=late.map{trajectoryDifference(it,base)}.average()
             val visual=late.map{min(1.0,abs(it.visual-base.visual)/100.0)}.average()
             val multiplierVisual=late.map{min(1.0,abs(it.ultra-base.ultra)/100.0)}.average()
             val stability=late.map{abs(it.stable-base.stable)}.average()
             // Compare late-stage behaviour with the same round's earlier stage.
             // Red multiplier state and raw speed are intentionally absent.
-            (movement*.40 + visual*.25 + multiplierVisual*.25 + stability*.10).coerceIn(0.0,1.0)
+            (movement*.46 + visual*.24 + multiplierVisual*.20 + stability*.10).coerceIn(0.0,1.0)
         }
         return if(scores.isEmpty()) 0.0 else scores.average()*100.0
+    }
+
+    private fun trajectoryDifference(a:S,b:S):Double {
+        val dx=abs(a.x-b.x)
+        val dy=abs(a.y-b.y)
+        val displacement=min(1.0,(dx+dy)/max(1.0,100.0))
+        val directionA=Math.atan2(a.y,b.x.coerceAtLeast(0.0001))
+        val directionB=Math.atan2(b.y,b.x.coerceAtLeast(0.0001))
+        val direction=min(1.0,abs(directionA-directionB)/Math.PI)
+        return displacement*0.72+direction*0.28
     }
 
     private fun normalise(v:Double)=min(100.0,v)/100.0
