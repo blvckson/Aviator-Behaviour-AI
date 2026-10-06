@@ -127,7 +127,7 @@ class BehaviourAnalyser {
         val dx=abs(a.x-b.x)
         val dy=abs(a.y-b.y)
         val displacement=min(1.0,(dx+dy)/max(1.0,100.0))
-        val directionA=Math.atan2(a.y,b.x.coerceAtLeast(0.0001))
+        val directionA=Math.atan2(a.y,a.x.coerceAtLeast(0.0001))
         val directionB=Math.atan2(b.y,b.x.coerceAtLeast(0.0001))
         val direction=min(1.0,abs(directionA-directionB)/Math.PI)
         return displacement*0.72+direction*0.28
