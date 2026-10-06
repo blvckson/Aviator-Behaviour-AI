@@ -214,7 +214,7 @@ class UltraScanEngine {
             val py=(y+dy).coerceIn(0,b.height-1)
             val cc=b.getPixel(px,py)
             val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
-            if(r>145 && r>g*1.16 && r>bl*1.16) hit++
+            if(r.toDouble()>145.0 && r.toDouble()>g*1.16 && r.toDouble()>bl*1.16) hit++
             total++
         }
         return hit.toDouble()/max(1,total)
@@ -235,7 +235,7 @@ class UltraScanEngine {
             val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
             val red=(r-g*1.30).coerceAtLeast(0).toDouble()/255.0
             val bright=((r+g+bl)/3.0)/255.0
-            if(r>155 && r>g*1.18 && r>bl*1.18){
+            if(r.toDouble()>155.0 && r.toDouble()>g*1.18 && r.toDouble()>bl*1.18){
                 val near=redNeighbourSupport(b,x,y)
                 val w=(0.35+red*0.85+bright*0.20)*(0.65+near*0.75)
                 sx+=x*w; sy+=y*w; weighted+=w
