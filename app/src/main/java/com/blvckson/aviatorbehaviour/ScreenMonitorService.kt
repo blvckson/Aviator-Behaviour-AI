@@ -160,22 +160,34 @@ class ScreenMonitorService : Service() {
     private fun publish(events:List<VisualEvent>){
         val cashOut=events.lastOrNull{it.type=="PRE_FLY_AWAY_DETECTED"}
         if(cashOut!=null){
-            uiHandler.post{overlay?.text="CASH OUT NOW — PRE-FLY-AWAY DETECTED\n${cashOut.detail}"; overlay?.setBackgroundColor(0xFFE53935.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
+            uiHandler.post{
+                overlay?.text=dotStatus(true)+"  CASH OUT NOW — PRE-FLY-AWAY DETECTED\\n${cashOut.detail}"
+                overlay?.setBackgroundColor(0xFFE53935.toInt())
+                overlay?.setTextColor(0xFFFFFFFF.toInt())
+            }
             return
         }
         val match=events.lastOrNull{it.type=="PRE_FLY_AWAY_MATCH"||it.type=="BEHAVIOUR_SIMILARITY"}
         if(match!=null){
             val high=match.type=="PRE_FLY_AWAY_MATCH"||match.score>=82.0; val strong=match.score>=65.0
             val label=when{high->"BEHAVIOUR: %.0f%% HIGH MATCH".format(match.score);strong->"BEHAVIOUR: %.0f%% STRONG MATCH".format(match.score);else->"BEHAVIOUR: %.0f%% MATCH".format(match.score)}
-            uiHandler.post{overlay?.text=label; overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
+            uiHandler.post{overlay?.text=dotStatus(false)+"  "+label; overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
         }else publishStatus(engine.currentSimilarity())
     }
 
-    private fun publishStatus(score:Double){uiHandler.post{overlay?.text=if(score>0.45)"BEHAVIOUR: %.0f%% MATCH".format(score*100.0)else "BEHAVIOUR: MONITORING"; overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}}
+    private fun publishStatus(score:Double){uiHandler.post{overlay?.text=dotStatus(false)+"  "+(if(score>0.45)"BEHAVIOUR: %.0f%% MATCH".format(score*100.0)else "BEHAVIOUR: MONITORING"); overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}}
+
+    private fun dotStatus(preFlyAway:Boolean):android.text.SpannableString{
+        val text=if(preFlyAway)"●  ●" else "●"
+        val s=android.text.SpannableString(text)
+        s.setSpan(android.text.style.ForegroundColorSpan(0xFF00C853.toInt()),0,1,android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if(preFlyAway)s.setSpan(android.text.style.ForegroundColorSpan(0xFFE53935.toInt()),3,4,android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return s
+    }
 
     private fun showOverlay(){
         windowManager=getSystemService(WINDOW_SERVICE) as WindowManager
-        val tv=TextView(this); tv.text="BEHAVIOUR: MONITORING"; tv.textSize=13f
+        val tv=TextView(this); tv.text=dotStatus(false).toString()+"  BEHAVIOUR: MONITORING"; tv.textSize=13f
         tv.setTextColor(0xFFFFFFFF.toInt()); tv.setBackgroundColor(0xCC202124.toInt()); tv.setPadding(18,10,18,10)
         val lp=WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT)
         lp.gravity=Gravity.TOP or Gravity.START; lp.x=overlayX; lp.y=overlayY
