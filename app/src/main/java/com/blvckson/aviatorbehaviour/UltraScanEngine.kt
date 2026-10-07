@@ -29,21 +29,30 @@ class UltraScanEngine {
     private var lastRoundPlaneFrame = -1
     private var roundStartX = Float.NaN
     private var roundStartY = Float.NaN
+    private var trackerConfidence = 0.0
+    private var lastFrameNow = 0L
+    private var sceneStability = 1.0
 
     fun inspect(frame: Bitmap, now: Long): List<VisualEvent> {
         val out = ArrayList<VisualEvent>(8)
         scanFrame++
         val p = previous
         if (p != null && p.width == frame.width && p.height == frame.height) {
-            val change = sampleChangeFocused(p, frame, planeBottomForAnalysis(frame))
-            changeVelocity = changeVelocity * 0.65 + (change - lastChange) * 0.35
+            val frameGap = if (lastFrameNow == 0L) 16L else (now - lastFrameNow).coerceIn(8L, 120L)
+            lastFrameNow = now
+            val bottom = planeBottomForAnalysis(frame)
+            val fastChange = sampleChangeFocused(p, frame, bottom)
+            val denseChange = roiChangeDense(p, frame, analysisLeft, analysisTop, analysisRight, bottom, 18, 12)
+            val change = fastChange * 0.42 + denseChange * 0.58
+            changeVelocity = changeVelocity * 0.62 + (change - lastChange) * 0.38
             lastChange = change
-            if (change > 0.018) out.add(VisualEvent(now, "FRAME_CHANGE", change, "whole-screen appearance/graphics change"))
+            sceneStability = (sceneStability * 0.82 + (1.0 - min(1.0, change / 0.16)) * 0.18).coerceIn(0.0, 1.0)
+            if (change > 0.014) out.add(VisualEvent(now, "FRAME_CHANGE", change, "adaptive focused appearance/graphics change"))
 
-            val graphics = graphicsChangeFocused(p, frame, planeBottomForAnalysis(frame))
+            val graphics = graphicsChangeFocused(p, frame, bottom)
             if (graphics > 0.012) out.add(VisualEvent(now, "GRAPHICS_APPEARANCE", graphics * 100.0, "whole-screen graphics/appearance signature change"))
 
-            val centerChange = roiChange(p, frame, analysisLeft, analysisTop, analysisRight, planeBottomForAnalysis(frame))
+            val centerChange = roiChangeDense(p, frame, analysisLeft, analysisTop, analysisRight, bottom, 12, 8)
             if (centerChange > 0.012)
                 out.add(VisualEvent(now, "MULTIPLIER_VISUAL_CHANGE", centerChange, "central multiplier-area visual change"))
 
@@ -78,8 +87,9 @@ class UltraScanEngine {
                 roundStartY = Float.NaN
             }
             val scanCoverage = if (roundScanFrames > 0) roundCoveredFrames.toDouble() / roundScanFrames else 0.0
-            if (plane.found && scanCoverage >= 0.82 && roundCoveredFrames % 8 == 0)
-                out.add(VisualEvent(now, "ULTRASCAN_COVERAGE", scanCoverage * 100.0, "UltraScan coverage maintained through current round"))
+            val effectiveCoverage = (scanCoverage * 0.72 + trackerConfidence * 0.28).coerceIn(0.0, 1.0)
+            if (plane.found && effectiveCoverage >= 0.82 && roundCoveredFrames % 6 == 0)
+                out.add(VisualEvent(now, "ULTRASCAN_COVERAGE", effectiveCoverage * 100.0, "adaptive UltraScan coverage maintained through current round"))
             val speed: Double = if (plane.found) sqrt((plane.vx * plane.vx + plane.vy * plane.vy).toDouble()) else 0.0
             val accel = abs(plane.acceleration.toDouble())
             if (plane.found && (speed > 5.0 || accel > 18.0))
@@ -117,10 +127,11 @@ class UltraScanEngine {
             // Dedicated early pre-fly-away detector. It requires sustained
             // behavioural evidence plus focused UltraWatch evidence, rather
             // than relying on the raw multiplier number.
+            val ultraWatchChange = ultraWatchChange(p, frame, plane)
             val preFlyAwayEvidence = similarity * 0.45 +
                 transitionEvidence * 0.25 +
                 movementScore * 0.15 +
-                min(1.0, ultraWatchChange(p, frame, plane) / 0.12) * 0.15
+                min(1.0, ultraWatchChange / 0.12) * 0.15
             if (similarityHold >= 2 && preFlyAwayEvidence >= 0.68)
                 out.add(VisualEvent(now, "PRE_FLY_AWAY_DETECTED",
                     preFlyAwayEvidence * 100.0,
@@ -130,7 +141,6 @@ class UltraScanEngine {
             // independently monitor the current multiplier area and the tracked
             // plane area, then combine their evidence. This avoids losing the
             // multiplier when the plane moves away from it.
-            val ultraWatchChange = ultraWatchChange(p, frame, plane)
             val ultraWatchRed = ultraWatchRed(frame, plane)
             val ultraWatchTrigger = ultraWatchChange > 0.050 ||
                 (plane.found && transitionEvidence > 0.42 && ultraWatchChange > 0.025) ||
@@ -245,6 +255,7 @@ class UltraScanEngine {
         var total=0.0; var n=0
         for(j in 0 until sy) for(i in 0 until sx){
             val x=x0+i*(x1-x0-1)/max(1,sx-1); val y=y0+j*(y1-y0-1)/max(1,sy-1)
+            if (isOppositeBettingCorner(x,y,b)) continue
             val ca=a.getPixel(x,y); val cb=b.getPixel(x,y)
             val ar=(ca shr 16) and 255; val ag=(ca shr 8) and 255; val ab=ca and 255
             val br=(cb shr 16) and 255; val bg=(cb shr 8) and 255; val bb=cb and 255
@@ -353,6 +364,19 @@ class UltraScanEngine {
         return hit.toDouble()/max(1,total)
     }
 
+    private fun xSafe(sum: Double, weight: Double): Float = if (weight > 0.0) (sum / weight).toFloat() else Float.NaN
+
+    private fun isOppositeBettingCorner(x:Int,y:Int,b:Bitmap):Boolean {
+        if (roundStartX.isNaN() || roundStartY.isNaN()) return false
+        val startLeft = roundStartX < b.width * 0.5f
+        val startTop = roundStartY < b.height * 0.5f
+        val cornerX = if (startLeft) b.width * 0.82 else b.width * 0.18
+        val cornerY = if (startTop) b.height * 0.82 else b.height * 0.18
+        val dx=(x-cornerX)/b.width
+        val dy=(y-cornerY)/b.height
+        return dx*dx+dy*dy < 0.045*0.045
+    }
+
     private fun preFlyAwaySentence(sim: Double, transition: Double, movement: Double): String {
         return when {
             transition >= 0.65 && movement >= 0.60 -> "common behaviour: movement pattern strengthens with a visible transition before fly-away"
@@ -365,13 +389,14 @@ class UltraScanEngine {
 
     private fun trackPlane(b: Bitmap, t: Long, frameNo: Int): PlaneState {
         val local = !lastX.isNaN() && frameNo - lastPlaneScanFrame <= 3
-        val step = if(local) 5 else 7
+        val uncertainty = (1.0 - trackerConfidence).coerceIn(0.0, 1.0)
+        val step = if(local) (4 + (uncertainty * 2.0).toInt()).coerceIn(4, 6) else 6
         val x0=(b.width*focusLeft).toInt(); val x1=(b.width*focusRight).toInt()
         val y0=(b.height*focusTop).toInt(); val y1=(b.height*focusBottom).toInt()
         val px=if(local)(lastX+lastDx*max(18f,b.width*0.08f)).toInt() else (x0+x1)/2
         val py=if(local)(lastY+lastDy*max(12f,b.height*0.05f)).toInt() else (y0+y1)/2
-        val rx=if(local)(b.width*0.30).toInt() else (x1-x0)
-        val ry=if(local)(b.height*0.26).toInt() else (y1-y0)
+        val rx=if(local)(b.width*(0.24 + uncertainty*0.10)).toInt() else (x1-x0)
+        val ry=if(local)(b.height*(0.20 + uncertainty*0.10)).toInt() else (y1-y0)
         val xs=max(x0,px-rx); val xe=min(x1,px+rx); val ys=max(y0,py-ry); val ye=min(y1,py+ry)
         var sx=0.0; var sy=0.0; var weighted=0.0
         for(y in ys until ye step step) for(x in xs until xe step step){
@@ -384,10 +409,10 @@ class UltraScanEngine {
                 sx+=x*w; sy+=y*w; weighted+=w
             }
         }
-        var found=weighted>3.2
-        if(local && (scanFrame % 4 == 0 || !found)){
+        var found=weighted>2.7
+        if(local && (scanFrame % 3 == 0 || !found || uncertainty > 0.45)){
             sx=0.0; sy=0.0; weighted=0.0
-            for(y in y0 until y1 step 7) for(x in x0 until x1 step 7){
+            for(y in y0 until y1 step 6) for(x in x0 until x1 step 6){
                 val cc=b.getPixel(x,y); val r=(cc shr 16) and 255; val g=(cc shr 8) and 255; val bl=cc and 255
                 if(r.toDouble()>155.0 && r.toDouble()>g.toDouble()*1.18 && r.toDouble()>bl.toDouble()*1.18){
                     val near=redNeighbourSupport(b,x,y)
@@ -395,11 +420,22 @@ class UltraScanEngine {
                     sx+=x*w;sy+=y*w;weighted+=w
                 }
             }
-            found=weighted>3.2
+            found=weighted>2.7
         }
-        if(found) lostPlaneFrames=0 else lostPlaneFrames++
-        val x=if(found)(sx/weighted).toFloat() else Float.NaN
-        val y=if(found)(sy/weighted).toFloat() else Float.NaN
+        if(found) {
+            lostPlaneFrames=0
+            val supportConfidence=(weighted/18.0).coerceIn(0.0,1.0)
+            val continuity=if(!lastX.isNaN()) {
+                val jump=sqrt((xSafe(sx,weighted)-lastX)*(xSafe(sx,weighted)-lastX)+(xSafe(sy,weighted)-lastY)*(xSafe(sy,weighted)-lastY))
+                (1.0-min(1.0,jump/(b.width*0.18))).coerceIn(0.0,1.0)
+            } else 0.5
+            trackerConfidence=(trackerConfidence*0.68+supportConfidence*0.20+continuity*0.12).coerceIn(0.0,1.0)
+        } else {
+            lostPlaneFrames++
+            trackerConfidence*=0.72
+        }
+        val x=if(found)xSafe(sx,weighted) else Float.NaN
+        val y=if(found)xSafe(sy,weighted) else Float.NaN
         var vx=0f; var vy=0f; var acc=0f
         if(found && !lastX.isNaN() && lastT>0){
             val dt=((t-lastT).coerceAtLeast(1))/1000f
