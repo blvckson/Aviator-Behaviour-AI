@@ -106,17 +106,19 @@ class UltraScanEngine {
                 out.add(VisualEvent(now, "PRE_FLY_AWAY_MATCH", similarity * 100.0,
                     "behaviour similarity strengthening before transition"))
 
-            // ULTRAWATCH is deliberately tighter than the general playfield scan:
-            // it watches the current multiplier zone and the tracked plane zone only.
+            // ULTRAWATCH is a dedicated dual-zone watch:
+            // independently monitor the current multiplier area and the tracked
+            // plane area, then combine their evidence. This avoids losing the
+            // multiplier when the plane moves away from it.
             val ultraWatchChange = ultraWatchChange(p, frame, plane)
-            val ultraWatchRed = redDensity(frame, ultraWatchLeft, ultraWatchTop, ultraWatchRight, ultraWatchBottom)
-            val ultraWatchTrigger = ultraWatchChange > 0.075 ||
-                (plane.found && transitionEvidence > 0.52 && ultraWatchChange > 0.035) ||
+            val ultraWatchRed = ultraWatchRed(frame, plane)
+            val ultraWatchTrigger = ultraWatchChange > 0.050 ||
+                (plane.found && transitionEvidence > 0.42 && ultraWatchChange > 0.025) ||
                 (!plane.found && lostPlaneFrames >= 1) ||
-                (ultraWatchRed > 0.055 && stable)
+                (ultraWatchRed > 0.040 && stable)
             if (ultraWatchTrigger)
                 out.add(VisualEvent(now, "ULTRAWATCH", max(ultraWatchChange, similarity),
-                    "focused plane + current multiplier transition watch"))
+                    "dual-zone plane + current multiplier transition watch"))
 
             if (redDensity > 0.045 && stable)
                 out.add(VisualEvent(now, "ENDING_STATE_CLUSTER", redDensity * 100.0,
@@ -134,36 +136,66 @@ class UltraScanEngine {
     private val focusRight = 0.92
     private val focusBottom = 0.72
 
-    private val ultraWatchLeft = 0.18
-    private val ultraWatchTop = 0.10
-    private val ultraWatchRight = 0.82
-    private val ultraWatchBottom = 0.58
+    private val ultraWatchLeft = 0.14
+    private val ultraWatchTop = 0.08
+    private val ultraWatchRight = 0.86
+    private val ultraWatchBottom = 0.62
 
     private fun ultraWatchChange(a: Bitmap, b: Bitmap, plane: PlaneState): Double {
-        val baseL = (b.width * ultraWatchLeft).toInt()
-        val baseR = (b.width * ultraWatchRight).toInt()
-        val baseT = (b.height * ultraWatchTop).toInt()
-        val baseB = (b.height * ultraWatchBottom).toInt()
+        // Two independent ROIs are sampled: a stable current-multiplier ROI
+        // and a moving plane ROI. Their evidence is combined, not intersected.
+        val multiplier = roiChangeDense(a, b,
+            ultraWatchLeft, ultraWatchTop, ultraWatchRight, ultraWatchBottom, 14, 9)
 
-        // When the plane is visible, tighten the watch area around its current
-        // position while retaining the multiplier zone in the same frame.
-        val planeL = if (plane.found) (plane.x - b.width * 0.16f).toInt() else baseL
-        val planeR = if (plane.found) (plane.x + b.width * 0.16f).toInt() else baseR
-        val planeT = if (plane.found) (plane.y - b.height * 0.14f).toInt() else baseT
-        val planeB = if (plane.found) (plane.y + b.height * 0.14f).toInt() else baseB
+        val planeChange = if (plane.found) {
+            val halfW = b.width * 0.19f
+            val halfH = b.height * 0.17f
+            val l = ((plane.x - halfW) / b.width).toDouble().coerceIn(ultraWatchLeft, ultraWatchRight)
+            val r = ((plane.x + halfW) / b.width).toDouble().coerceIn(l + 0.01, ultraWatchRight)
+            val t = ((plane.y - halfH) / b.height).toDouble().coerceIn(ultraWatchTop, ultraWatchBottom)
+            val bot = ((plane.y + halfH) / b.height).toDouble().coerceIn(t + 0.01, ultraWatchBottom)
+            roiChangeDense(a, b, l, t, r, bot, 11, 8)
+        } else 0.0
 
-        val x0 = max(baseL, planeL).coerceIn(0, b.width - 1)
-        val x1 = min(baseR, planeR).coerceIn(x0 + 1, b.width)
-        val y0 = max(baseT, planeT).coerceIn(0, b.height - 1)
-        val y1 = min(baseB, planeB).coerceIn(y0 + 1, b.height)
+        // Multiplier-area changes are retained strongly even when the plane is
+        // elsewhere; plane-area changes get extra weight when the plane is tracked.
+        return if (plane.found) {
+            max(multiplier * 0.58 + planeChange * 0.42, multiplier * 0.90)
+        } else {
+            multiplier
+        }
+    }
 
-        val sx = 10
-        val sy = 7
+    private fun ultraWatchRed(b: Bitmap, plane: PlaneState): Double {
+        val multiplierRed = redDensity(
+            b, ultraWatchLeft, ultraWatchTop, ultraWatchRight, ultraWatchBottom
+        )
+        if (!plane.found) return multiplierRed
+
+        val halfW = b.width * 0.19f
+        val halfH = b.height * 0.17f
+        val l = ((plane.x - halfW) / b.width).toDouble().coerceIn(ultraWatchLeft, ultraWatchRight)
+        val r = ((plane.x + halfW) / b.width).toDouble().coerceIn(l + 0.01, ultraWatchRight)
+        val t = ((plane.y - halfH) / b.height).toDouble().coerceIn(ultraWatchTop, ultraWatchBottom)
+        val bot = ((plane.y + halfH) / b.height).toDouble().coerceIn(t + 0.01, ultraWatchBottom)
+        val planeRed = redDensity(b, l, t, r, bot)
+        return max(multiplierRed, planeRed * 0.85)
+    }
+
+    private fun roiChangeDense(
+        a: Bitmap, b: Bitmap,
+        l: Double, t: Double, r: Double, bot: Double,
+        sx: Int, sy: Int
+    ): Double {
+        val x0 = (b.width * l).toInt().coerceIn(0, b.width - 1)
+        val x1 = (b.width * r).toInt().coerceIn(x0 + 1, b.width)
+        val y0 = (b.height * t).toInt().coerceIn(0, b.height - 1)
+        val y1 = (b.height * bot).toInt().coerceIn(y0 + 1, b.height)
         var total = 0L
         var n = 0
         for (j in 0 until sy) for (i in 0 until sx) {
-            val x = x0 + i * (x1 - x0 - 1) / (sx - 1)
-            val y = y0 + j * (y1 - y0 - 1) / (sy - 1)
+            val x = x0 + i * (x1 - x0 - 1) / max(1, sx - 1)
+            val y = y0 + j * (y1 - y0 - 1) / max(1, sy - 1)
             val ca = a.getPixel(x, y)
             val cb = b.getPixel(x, y)
             total += abs(((ca shr 16) and 255) - ((cb shr 16) and 255)).toLong()
