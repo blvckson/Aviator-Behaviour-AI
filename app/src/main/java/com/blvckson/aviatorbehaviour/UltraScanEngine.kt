@@ -116,9 +116,19 @@ class UltraScanEngine {
             if (similarityHold >= 2 && preFlyAwayEvidence >= 0.68)
                 out.add(VisualEvent(now, "PRE_FLY_AWAY_DETECTED",
                     preFlyAwayEvidence * 100.0,
-                    "pre-fly-away behaviour detected; immediate cash-out warning"))
+                    preFlyAwaySentence(similarity, transitionEvidence, movementScore)))
 
-            // ULTRAWATCH is a dedicated dual-zone watch:
+            private fun preFlyAwaySentence(sim: Double, transition: Double, movement: Double): String {
+        return when {
+            transition >= 0.65 && movement >= 0.60 -> "common behaviour: movement pattern strengthens with a visible transition before fly-away"
+            transition >= 0.65 -> "common behaviour: visual transition strengthens before fly-away"
+            movement >= 0.60 -> "common behaviour: plane movement pattern strengthens toward fly-away"
+            sim >= 0.78 -> "common behaviour: the pre-fly-away visual pattern remains strongly similar"
+            else -> "common behaviour: a consistent pre-fly-away pattern is developing"
+        }
+    }
+
+    // ULTRAWATCH is a dedicated dual-zone watch:
             // independently monitor the current multiplier area and the tracked
             // plane area, then combine their evidence. This avoids losing the
             // multiplier when the plane moves away from it.
