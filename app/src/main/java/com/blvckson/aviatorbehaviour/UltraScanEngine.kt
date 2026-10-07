@@ -106,6 +106,18 @@ class UltraScanEngine {
                 out.add(VisualEvent(now, "PRE_FLY_AWAY_MATCH", similarity * 100.0,
                     "behaviour similarity strengthening before transition"))
 
+            // Dedicated early pre-fly-away detector. It requires sustained
+            // behavioural evidence plus focused UltraWatch evidence, rather
+            // than relying on the raw multiplier number.
+            val preFlyAwayEvidence = similarity * 0.45 +
+                transitionEvidence * 0.25 +
+                movementScore * 0.15 +
+                min(1.0, ultraWatchChange(p, frame, plane) / 0.12) * 0.15
+            if (similarityHold >= 2 && preFlyAwayEvidence >= 0.68)
+                out.add(VisualEvent(now, "PRE_FLY_AWAY_DETECTED",
+                    preFlyAwayEvidence * 100.0,
+                    "pre-fly-away behaviour detected; immediate cash-out warning"))
+
             // ULTRAWATCH is a dedicated dual-zone watch:
             // independently monitor the current multiplier area and the tracked
             // plane area, then combine their evidence. This avoids losing the
