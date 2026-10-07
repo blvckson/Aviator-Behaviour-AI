@@ -86,7 +86,7 @@ class MainActivity: Activity() {
             .append("Rounds with end markers: ").append(pct(a.markerAgreement)).append("\n")
             .append("First detected change phase: ").append(pct(a.firstChangePhase*100.0)).append("\n")
             .append("Strongest change phase: ").append(pct(a.endingChangePhase*100.0)).append("\n\n")
-            .append("The analyser compares late behaviour against each round’s earlier baseline, then checks repeated transitions across stored rounds. Observed behaviour only; no guaranteed outcome.")
+            .append(commonBehaviourStatement(a)).append("\nObserved behaviour only; no guaranteed outcome.")
         AlertDialog.Builder(this).setTitle("END-OF-ROUND ANALYSER").setMessage(msg.toString()).setPositiveButton("CLOSE",null).show()
     }
 
@@ -100,8 +100,23 @@ class MainActivity: Activity() {
         }
         val a=BehaviourAnalyser().analyse(records)
         val similarity=pct(a.overallPreFlySimilarity)
-        val msg="The pre-fly-away similarities show that the plane behaves differently toward the end of the round, and the behaviour remains $similarity the same across the stored rounds."
+        val msg=commonBehaviourStatement(a)
         AlertDialog.Builder(this).setTitle("STATEMENT").setMessage(msg).setPositiveButton("CLOSE",null).show()
+    }
+
+    private fun commonBehaviourStatement(a:BehaviourAnalysis):String{
+        val similarity=pct(a.overallPreFlySimilarity)
+        val feature=when{
+            a.planeMotionRise>=a.visualRise&&a.planeMotionRise>=a.ultraWatchRise->"plane movement becomes more pronounced"
+            a.visualRise>=a.ultraWatchRise->"visual transition becomes more pronounced"
+            else->"the focused transition pattern becomes more pronounced"
+        }
+        val difference=when{
+            a.endingDifferenceScore>=70.0->"The pre-fly-away behaviour is clearly different toward the end"
+            a.endingDifferenceScore>=45.0->"The pre-fly-away behaviour becomes noticeably different toward the end"
+            else->"The pre-fly-away behaviour shows a developing difference toward the end"
+        }
+        return "$difference: $feature, while the common behaviour remains $similarity similar across the stored rounds."
     }
 
     private fun signed(value:Double):String=(if(value>=0)"+" else "")+"%.1f".format(Locale.US,value)+" pts"
