@@ -160,7 +160,7 @@ class ScreenMonitorService : Service() {
     private fun publish(events:List<VisualEvent>){
         val cashOut=events.lastOrNull{it.type=="PRE_FLY_AWAY_DETECTED"}
         if(cashOut!=null){
-            uiHandler.post{overlay?.text="CASH OUT NOW — PRE-FLY-AWAY DETECTED"; overlay?.setBackgroundColor(0xFFE53935.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
+            uiHandler.post{overlay?.text="CASH OUT NOW — PRE-FLY-AWAY DETECTED\n${cashOut.detail}"; overlay?.setBackgroundColor(0xFFE53935.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
             return
         }
         val match=events.lastOrNull{it.type=="PRE_FLY_AWAY_MATCH"||it.type=="BEHAVIOUR_SIMILARITY"}
