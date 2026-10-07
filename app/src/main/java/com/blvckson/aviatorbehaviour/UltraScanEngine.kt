@@ -85,9 +85,17 @@ class UltraScanEngine {
                 out.add(VisualEvent(now, "PRE_FLY_AWAY_MATCH", similarity * 100.0,
                     "behaviour similarity strengthening before transition"))
 
-            if (change > 0.12 || transitionEvidence > 0.58 || (!plane.found && lostPlaneFrames >= 1) || (redDensity > 0.045 && stable))
-                out.add(VisualEvent(now, "ULTRAWATCH", max(change, similarity),
-                    "sudden transition / possible fly-away"))
+            // ULTRAWATCH is deliberately tighter than the general playfield scan:
+            // it watches the current multiplier zone and the tracked plane zone only.
+            val ultraWatchChange = ultraWatchChange(p, frame, plane)
+            val ultraWatchRed = redDensity(frame, ultraWatchLeft, ultraWatchTop, ultraWatchRight, ultraWatchBottom)
+            val ultraWatchTrigger = ultraWatchChange > 0.075 ||
+                (plane.found && transitionEvidence > 0.52 && ultraWatchChange > 0.035) ||
+                (!plane.found && lostPlaneFrames >= 1) ||
+                (ultraWatchRed > 0.055 && stable)
+            if (ultraWatchTrigger)
+                out.add(VisualEvent(now, "ULTRAWATCH", max(ultraWatchChange, similarity),
+                    "focused plane + current multiplier transition watch"))
 
             if (redDensity > 0.045 && stable)
                 out.add(VisualEvent(now, "ENDING_STATE_CLUSTER", redDensity * 100.0,
@@ -104,6 +112,46 @@ class UltraScanEngine {
     private val focusTop = 0.08
     private val focusRight = 0.92
     private val focusBottom = 0.72
+
+    private val ultraWatchLeft = 0.18
+    private val ultraWatchTop = 0.10
+    private val ultraWatchRight = 0.82
+    private val ultraWatchBottom = 0.58
+
+    private fun ultraWatchChange(a: Bitmap, b: Bitmap, plane: PlaneState): Double {
+        val baseL = (b.width * ultraWatchLeft).toInt()
+        val baseR = (b.width * ultraWatchRight).toInt()
+        val baseT = (b.height * ultraWatchTop).toInt()
+        val baseB = (b.height * ultraWatchBottom).toInt()
+
+        // When the plane is visible, tighten the watch area around its current
+        // position while retaining the multiplier zone in the same frame.
+        val planeL = if (plane.found) (plane.x - b.width * 0.16f).toInt() else baseL
+        val planeR = if (plane.found) (plane.x + b.width * 0.16f).toInt() else baseR
+        val planeT = if (plane.found) (plane.y - b.height * 0.14f).toInt() else baseT
+        val planeB = if (plane.found) (plane.y + b.height * 0.14f).toInt() else baseB
+
+        val x0 = max(baseL, planeL).coerceIn(0, b.width - 1)
+        val x1 = min(baseR, planeR).coerceIn(x0 + 1, b.width)
+        val y0 = max(baseT, planeT).coerceIn(0, b.height - 1)
+        val y1 = min(baseB, planeB).coerceIn(y0 + 1, b.height)
+
+        val sx = 10
+        val sy = 7
+        var total = 0L
+        var n = 0
+        for (j in 0 until sy) for (i in 0 until sx) {
+            val x = x0 + i * (x1 - x0 - 1) / (sx - 1)
+            val y = y0 + j * (y1 - y0 - 1) / (sy - 1)
+            val ca = a.getPixel(x, y)
+            val cb = b.getPixel(x, y)
+            total += abs(((ca shr 16) and 255) - ((cb shr 16) and 255)).toLong()
+            total += abs(((ca shr 8) and 255) - ((cb shr 8) and 255)).toLong()
+            total += abs((ca and 255) - (cb and 255)).toLong()
+            n += 3
+        }
+        return total.toDouble() / max(1, n * 255)
+    }
 
     private fun graphicsChangeFocused(a: Bitmap, b: Bitmap): Double {
         val x0=(b.width*focusLeft).toInt(); val x1=(b.width*focusRight).toInt()
