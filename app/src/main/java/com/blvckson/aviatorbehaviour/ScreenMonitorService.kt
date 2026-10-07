@@ -160,18 +160,18 @@ class ScreenMonitorService : Service() {
     private fun publish(events:List<VisualEvent>){
         val cashOut=events.lastOrNull{it.type=="PRE_FLY_AWAY_DETECTED"}
         if(cashOut!=null){
-            uiHandler.post{overlay?.text="CASH OUT NOW — PRE-FLY-AWAY DETECTED"}
+            uiHandler.post{overlay?.text="CASH OUT NOW — PRE-FLY-AWAY DETECTED"; overlay?.setBackgroundColor(0xFFE53935.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
             return
         }
         val match=events.lastOrNull{it.type=="PRE_FLY_AWAY_MATCH"||it.type=="BEHAVIOUR_SIMILARITY"}
         if(match!=null){
             val high=match.type=="PRE_FLY_AWAY_MATCH"||match.score>=82.0; val strong=match.score>=65.0
             val label=when{high->"BEHAVIOUR: %.0f%% HIGH MATCH".format(match.score);strong->"BEHAVIOUR: %.0f%% STRONG MATCH".format(match.score);else->"BEHAVIOUR: %.0f%% MATCH".format(match.score)}
-            uiHandler.post{overlay?.text=label}
+            uiHandler.post{overlay?.text=label; overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
         }else publishStatus(engine.currentSimilarity())
     }
 
-    private fun publishStatus(score:Double){uiHandler.post{overlay?.text=if(score>0.45)"BEHAVIOUR: %.0f%% MATCH".format(score*100.0)else "BEHAVIOUR: MONITORING"}}
+    private fun publishStatus(score:Double){uiHandler.post{overlay?.text=if(score>0.45)"BEHAVIOUR: %.0f%% MATCH".format(score*100.0)else "BEHAVIOUR: MONITORING"; overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}}
 
     private fun showOverlay(){
         windowManager=getSystemService(WINDOW_SERVICE) as WindowManager
