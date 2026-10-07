@@ -161,7 +161,7 @@ class ScreenMonitorService : Service() {
         val cashOut=events.lastOrNull{it.type=="PRE_FLY_AWAY_DETECTED"}
         if(cashOut!=null){
             uiHandler.post{
-                overlay?.text=dotStatus(true)+"  CASH OUT NOW — PRE-FLY-AWAY DETECTED\\n${cashOut.detail}"
+                overlay?.text=android.text.SpannableStringBuilder(dotStatus(true)).append("  CASH OUT NOW — PRE-FLY-AWAY DETECTED\\n${cashOut.detail}")
                 overlay?.setBackgroundColor(0xFFE53935.toInt())
                 overlay?.setTextColor(0xFFFFFFFF.toInt())
             }
@@ -171,11 +171,11 @@ class ScreenMonitorService : Service() {
         if(match!=null){
             val high=match.type=="PRE_FLY_AWAY_MATCH"||match.score>=82.0; val strong=match.score>=65.0
             val label=when{high->"BEHAVIOUR: %.0f%% HIGH MATCH".format(match.score);strong->"BEHAVIOUR: %.0f%% STRONG MATCH".format(match.score);else->"BEHAVIOUR: %.0f%% MATCH".format(match.score)}
-            uiHandler.post{overlay?.text=dotStatus(false)+"  "+label; overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
+            uiHandler.post{overlay?.text=android.text.SpannableStringBuilder(dotStatus(false)).append("  ").append(label); overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}
         }else publishStatus(engine.currentSimilarity())
     }
 
-    private fun publishStatus(score:Double){uiHandler.post{overlay?.text=dotStatus(false)+"  "+(if(score>0.45)"BEHAVIOUR: %.0f%% MATCH".format(score*100.0)else "BEHAVIOUR: MONITORING"); overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}}
+    private fun publishStatus(score:Double){uiHandler.post{overlay?.text=android.text.SpannableStringBuilder(dotStatus(false)).append("  ").append(if(score>0.45)"BEHAVIOUR: %.0f%% MATCH".format(score*100.0)else "BEHAVIOUR: MONITORING"); overlay?.setBackgroundColor(0xCC202124.toInt()); overlay?.setTextColor(0xFFFFFFFF.toInt())}}
 
     private fun dotStatus(preFlyAway:Boolean):android.text.SpannableString{
         val text=if(preFlyAway)"●  ●" else "●"
@@ -187,7 +187,7 @@ class ScreenMonitorService : Service() {
 
     private fun showOverlay(){
         windowManager=getSystemService(WINDOW_SERVICE) as WindowManager
-        val tv=TextView(this); tv.text=dotStatus(false).toString()+"  BEHAVIOUR: MONITORING"; tv.textSize=13f
+        val tv=TextView(this); tv.text=android.text.SpannableStringBuilder(dotStatus(false)).append("  BEHAVIOUR: MONITORING"); tv.textSize=13f
         tv.setTextColor(0xFFFFFFFF.toInt()); tv.setBackgroundColor(0xCC202124.toInt()); tv.setPadding(18,10,18,10)
         val lp=WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT)
         lp.gravity=Gravity.TOP or Gravity.START; lp.x=overlayX; lp.y=overlayY
