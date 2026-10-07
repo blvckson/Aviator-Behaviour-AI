@@ -27,25 +27,27 @@ class UltraScanEngine {
     private var roundScanFrames = 0
     private var roundCoveredFrames = 0
     private var lastRoundPlaneFrame = -1
+    private var roundStartX = Float.NaN
+    private var roundStartY = Float.NaN
 
     fun inspect(frame: Bitmap, now: Long): List<VisualEvent> {
         val out = ArrayList<VisualEvent>(8)
         scanFrame++
         val p = previous
         if (p != null && p.width == frame.width && p.height == frame.height) {
-            val change = sampleChangeFocused(p, frame)
+            val change = sampleChangeFocused(p, frame, planeBottomForAnalysis(frame))
             changeVelocity = changeVelocity * 0.65 + (change - lastChange) * 0.35
             lastChange = change
             if (change > 0.018) out.add(VisualEvent(now, "FRAME_CHANGE", change, "whole-screen appearance/graphics change"))
 
-            val graphics = graphicsChangeFocused(p, frame)
+            val graphics = graphicsChangeFocused(p, frame, planeBottomForAnalysis(frame))
             if (graphics > 0.012) out.add(VisualEvent(now, "GRAPHICS_APPEARANCE", graphics * 100.0, "whole-screen graphics/appearance signature change"))
 
-            val centerChange = roiChange(p, frame, focusLeft, focusTop, focusRight, focusBottom)
+            val centerChange = roiChange(p, frame, analysisLeft, analysisTop, analysisRight, planeBottomForAnalysis(frame))
             if (centerChange > 0.012)
                 out.add(VisualEvent(now, "MULTIPLIER_VISUAL_CHANGE", centerChange, "central multiplier-area visual change"))
 
-            val redDensity = redDensity(frame, focusLeft, focusTop, focusRight, focusBottom)
+            val redDensity = redDensity(frame, analysisLeft, analysisTop, analysisRight, planeBottomForAnalysis(frame))
             if (redDensity > 0.018)
                 out.add(VisualEvent(now, "ENDING_RED_VISUAL", redDensity * 100.0, "red ending-state visual detected"))
 
@@ -54,6 +56,10 @@ class UltraScanEngine {
                 out.add(VisualEvent(now, "MULTIPLIER_VISUAL_STABLE", 1.0, "central multiplier-area visually stable while red"))
 
             val plane = trackPlane(frame, now, scanFrame)
+            if (plane.found && (roundStartY.isNaN() || lastRoundPlaneFrame < 0 || scanFrame - lastRoundPlaneFrame > 3)) {
+                roundStartX = plane.x
+                roundStartY = plane.y
+            }
             if (plane.found) {
                 if (lastRoundPlaneFrame < 0 || scanFrame - lastRoundPlaneFrame > 3) {
                     roundScanFrames = 0
@@ -68,6 +74,8 @@ class UltraScanEngine {
                 roundScanFrames = 0
                 roundCoveredFrames = 0
                 lastRoundPlaneFrame = -1
+                roundStartX = Float.NaN
+                roundStartY = Float.NaN
             }
             val scanCoverage = if (roundScanFrames > 0) roundCoveredFrames.toDouble() / roundScanFrames else 0.0
             if (plane.found && scanCoverage >= 0.82 && roundCoveredFrames % 8 == 0)
@@ -158,6 +166,18 @@ class UltraScanEngine {
     private val focusRight = 0.92
     private val focusBottom = 0.72
 
+    // Behaviour analysis is restricted to the active flight/multiplier field.
+    // The history strip above, everything below the plane's round-start line,
+    // and the opposite lower betting corner are deliberately excluded.
+    private val analysisLeft = 0.08
+    private val analysisTop = 0.10
+    private val analysisRight = 0.92
+
+    private fun planeBottomForAnalysis(b: Bitmap): Double {
+        val start = if (roundStartY.isNaN()) b.height * focusBottom else roundStartY.toDouble()
+        return (start / b.height).coerceIn(analysisTop + 0.04, focusBottom)
+    }
+
     private val ultraWatchLeft = 0.14
     private val ultraWatchTop = 0.08
     private val ultraWatchRight = 0.86
@@ -228,9 +248,9 @@ class UltraScanEngine {
         return total.toDouble() / max(1, n * 255)
     }
 
-    private fun graphicsChangeFocused(a: Bitmap, b: Bitmap): Double {
-        val x0=(b.width*focusLeft).toInt(); val x1=(b.width*focusRight).toInt()
-        val y0=(b.height*focusTop).toInt(); val y1=(b.height*focusBottom).toInt()
+    private fun graphicsChangeFocused(a: Bitmap, b: Bitmap, bottom: Double): Double {
+        val x0=(b.width*analysisLeft).toInt(); val x1=(b.width*analysisRight).toInt()
+        val y0=(b.height*analysisTop).toInt(); val y1=(b.height*bottom).toInt()
         val sx=14; val sy=11
         var total=0.0; var n=0
         for(j in 0 until sy) for(i in 0 until sx){
@@ -264,9 +284,9 @@ class UltraScanEngine {
         return total / max(1, n)
     }
 
-    private fun sampleChangeFocused(a: Bitmap, b: Bitmap): Double {
-        val x0=(b.width*focusLeft).toInt(); val x1=(b.width*focusRight).toInt()
-        val y0=(b.height*focusTop).toInt(); val y1=(b.height*focusBottom).toInt()
+    private fun sampleChangeFocused(a: Bitmap, b: Bitmap, bottom: Double): Double {
+        val x0=(b.width*analysisLeft).toInt(); val x1=(b.width*analysisRight).toInt()
+        val y0=(b.height*analysisTop).toInt(); val y1=(b.height*bottom).toInt()
         val sx=13; val sy=9
         var total=0L; var n=0
         for(j in 0 until sy) for(i in 0 until sx){
