@@ -113,6 +113,7 @@ class ScreenMonitorService : Service() {
             "MULTIPLIER_VISUAL_CHANGE"->visual=max(visual,event.score*100.0)
             "PLANE_MOTION"->{maxPlaneMotion=max(maxPlaneMotion,event.score);plane=max(plane,event.score);lastPlaneX=coordinate(event.detail,"x",lastPlaneX);lastPlaneY=coordinate(event.detail,"y",lastPlaneY)}
             "ULTRAWATCH"->{maxUltraWatch=max(maxUltraWatch,event.score*100.0);ultra=max(ultra,event.score*100.0)}
+            "PRE_FLY_AWAY_DETECTED"->{maxUltraWatch=max(maxUltraWatch,event.score);ultra=max(ultra,event.score)}
             "BEHAVIOUR_SIMILARITY","PRE_FLY_AWAY_MATCH"->sim=max(sim,event.score)
             "ENDING_RED_VISUAL"->red=max(red,event.score)
             "MULTIPLIER_VISUAL_STABLE"->stable=1.0
@@ -157,6 +158,11 @@ class ScreenMonitorService : Service() {
     }
 
     private fun publish(events:List<VisualEvent>){
+        val cashOut=events.lastOrNull{it.type=="PRE_FLY_AWAY_DETECTED"}
+        if(cashOut!=null){
+            uiHandler.post{overlay?.text="CASH OUT NOW — PRE-FLY-AWAY DETECTED"}
+            return
+        }
         val match=events.lastOrNull{it.type=="PRE_FLY_AWAY_MATCH"||it.type=="BEHAVIOUR_SIMILARITY"}
         if(match!=null){
             val high=match.type=="PRE_FLY_AWAY_MATCH"||match.score>=82.0; val strong=match.score>=65.0
